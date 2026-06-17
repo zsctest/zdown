@@ -1,0 +1,5 @@
+# 统一 rustfmt 版式。
+# 仅使用 stable rustfmt 支持的选项；如需更多版式控制，再考虑 nightly + unstable_features。
+
+edition = "2024"
+max_width = 100

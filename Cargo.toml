@@ -1,0 +1,83 @@
+# zdown 工作区根
+#
+# 本文件受项目 RULES.md 保护：未经用户明确授权禁止删除。
+# 修改按正常编辑流程处理。
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/document_model",
+    "crates/editor_engine",
+    "crates/markdown_renderer",
+    "crates/export_engine",
+    "crates/workspace",
+    "crates/config",
+    "crates/zdown-app",
+]
+
+# ----------------------------------------------------------------------------
+# 公共依赖版本集中管理
+#
+# 各成员 crate 通过 `foo.workspace = true` 引用，避免版本散落。
+# 选型依据见 docs/CRATE_DEPS.md 与 docs/ARCHITECTURE.md。
+# 阶段 0 仅需构建骨架，部分依赖（rfd / notify / wkhtmltopdf / fluent /
+# portable-pty / wasmtime 等）在对应阶段引入时再补到此表。
+# ----------------------------------------------------------------------------
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://cnb.cool/codebuddy/zdown"
+version = "0.0.0"
+
+[workspace.lints.rust]
+# 遵循 AGENTS.md 编码标准：禁止 unwrap / expect
+unsafe_code = "warn"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+# 禁止 unwrap / expect（AGENTS.md 编码标准）
+unwrap_used = "deny"
+expect_used = "deny"
+dbg_macro = "deny"
+print_stderr = "warn"
+print_stdout = "warn"
+todo = "warn"
+
+# ---------- 通用工具 ----------
+[workspace.dependencies]
+thiserror = "2.0.18"
+serde = { version = "1.0.228", features = ["derive"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+# ---------- document_model ----------
+pulldown-cmark = "0.13.4"
+
+# ---------- editor_engine ----------
+ropey = "1.6.1"
+
+# ---------- markdown_renderer ----------
+egui = "0.34.3"
+syntect = "5.3.0"
+
+# ---------- zdown-app ----------
+eframe = "0.34.3"
+
+# ---------- workspace 内部 path 依赖 ----------
+document_model = { path = "crates/document_model" }
+editor_engine = { path = "crates/editor_engine" }
+markdown_renderer = { path = "crates/markdown_renderer" }
+export_engine = { path = "crates/export_engine" }
+workspace = { path = "crates/workspace" }
+config = { path = "crates/config" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true

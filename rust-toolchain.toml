@@ -1,0 +1,8 @@
+# 固定 Rust 工具链版本（与根 Cargo.toml 的 rust-version 字段保持一致）。
+# 阶段 0 使用 stable 通道；如未来需要 nightly 特性（如 rustfmt unstable 选项），
+# 再切换到 nightly 并在此声明。
+
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
