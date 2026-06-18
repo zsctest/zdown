@@ -87,8 +87,46 @@ pub struct ThemeSpacing {
 }
 
 impl PdfConfig {
+    /// 暗色主题 preset：深色背景 + 浅色文字。
+    pub fn dark() -> Self {
+        let mut c = Self::default();
+        c.theme.colors = ThemeColors {
+            text: (220, 220, 220),
+            heading: (255, 255, 255),
+            code_bg: (60, 60, 60),
+            table_border: (100, 100, 100),
+            blockquote_border: (120, 120, 255),
+        };
+        c
+    }
+
+    /// 极简 preset：系统字体，省墨。
+    pub fn minimal() -> Self {
+        let mut c = Self::default();
+        c.theme.body_font = FontConfig {
+            name: "sans-serif".into(),
+            ttf_data: None,
+        };
+        c.theme.mono_font = FontConfig {
+            name: "monospace".into(),
+            ttf_data: None,
+        };
+        c.theme.heading_font = FontConfig {
+            name: "sans-serif".into(),
+            ttf_data: None,
+        };
+        c.header_footer = HeaderFooter {
+            left: String::new(),
+            center: String::new(),
+            right: String::new(),
+        };
+        c
+    }
+}
+
+impl Default for PdfConfig {
     /// 默认 preset：内嵌 Noto Sans CJK SC，A4，浅色主题。
-    pub fn default() -> Self {
+    fn default() -> Self {
         Self {
             paper: Paper::A4,
             margins: Margins {
@@ -141,48 +179,6 @@ impl PdfConfig {
                 },
             },
         }
-    }
-
-    /// 暗色主题 preset：深色背景 + 浅色文字。
-    pub fn dark() -> Self {
-        let mut c = Self::default();
-        c.theme.colors = ThemeColors {
-            text: (220, 220, 220),
-            heading: (255, 255, 255),
-            code_bg: (60, 60, 60),
-            table_border: (100, 100, 100),
-            blockquote_border: (120, 120, 255),
-        };
-        c
-    }
-
-    /// 极简 preset：系统字体，省墨。
-    pub fn minimal() -> Self {
-        let mut c = Self::default();
-        c.theme.body_font = FontConfig {
-            name: "sans-serif".into(),
-            ttf_data: None,
-        };
-        c.theme.mono_font = FontConfig {
-            name: "monospace".into(),
-            ttf_data: None,
-        };
-        c.theme.heading_font = FontConfig {
-            name: "sans-serif".into(),
-            ttf_data: None,
-        };
-        c.header_footer = HeaderFooter {
-            left: String::new(),
-            center: String::new(),
-            right: String::new(),
-        };
-        c
-    }
-}
-
-impl Default for PdfConfig {
-    fn default() -> Self {
-        Self::default()
     }
 }
 
