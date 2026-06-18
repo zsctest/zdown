@@ -65,6 +65,11 @@ syntect = "5.3.0"
 # ---------- zdown-app ----------
 eframe = "0.34.3"
 
+# ---------- workspace crate ----------
+rfd = "0.15"
+dirs = "5"
+toml = "0.8"
+
 # ---------- workspace 内部 path 依赖 ----------
 document_model = { path = "crates/document_model" }
 editor_engine = { path = "crates/editor_engine" }

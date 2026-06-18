@@ -65,6 +65,8 @@ jobs:
             libxkbcommon-dev \
             libwayland-dev \
             libvulkan-dev
+          # 注：rfd（阶段 1 引入）在 Linux 依赖 gtk，libgtk-3-dev 已包含上方。
+          # CI 无 DISPLAY，rfd::FileDialog::pick_file 返回 None，不跑对话框测试。
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
