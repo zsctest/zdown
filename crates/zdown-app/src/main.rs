@@ -38,13 +38,26 @@ fn main() -> eframe::Result {
     )
 }
 
-#[derive(Default)]
 struct ZdownApp {
     state: EditorState,
     confirm: ConfirmDialog,
     view_mode: ViewMode,
     /// 缓存上次窗口标题，避免每帧 send_viewport_cmd。
     last_title: String,
+    /// 缓存 SourceHighlighter 避免每帧重建。
+    highlighter: Option<markdown_renderer::SourceHighlighter>,
+}
+
+impl Default for ZdownApp {
+    fn default() -> Self {
+        Self {
+            state: EditorState::default(),
+            confirm: ConfirmDialog::default(),
+            view_mode: ViewMode::default(),
+            last_title: String::new(),
+            highlighter: markdown_renderer::SourceHighlighter::new().ok(),
+        }
+    }
 }
 
 impl eframe::App for ZdownApp {
@@ -70,9 +83,11 @@ impl eframe::App for ZdownApp {
 
         menu::show_confirm_dialog(&ctx, &mut self.state, &mut self.confirm);
 
+        let highlighter = self.highlighter.as_ref();
+
         // 根据视图模式渲染
         match self.view_mode {
-            ViewMode::Source => source_view::show_source_view(ui, &mut self.state),
+            ViewMode::Source => source_view::show_source_view(ui, &mut self.state, highlighter),
             ViewMode::Preview => preview_view::show_preview_view(ui, &mut self.state),
             ViewMode::Hybrid => {
                 // 阶段 2 占位：Hybrid 暂用 Preview，Plan 4 完整实现
