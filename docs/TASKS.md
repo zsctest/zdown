@@ -95,11 +95,68 @@
 
 ---
 
+## 阶段 1 — 最小可用编辑器（MVP）
+
+目标：能打开、编辑、保存 Markdown 文件，源码视图 + 行号。
+
+**实施计划**：拆分为 4 个独立 plan，按依赖顺序执行。每个 plan 含完整 TDD 步骤，详见各自文档。
+
+| Plan | 范围 | 详细文档 | 对应原任务 |
+| --- | --- | --- | --- |
+| Plan 1 | document_model（AST + parse + to_markdown） | [2026-06-18-document-model.md](superpowers/plans/2026-06-18-document-model.md) | T1-01, T1-03 ~ T1-06 |
+| Plan 2 | editor_engine（Buffer + Command + History + Editor） | [2026-06-18-editor-engine.md](superpowers/plans/2026-06-18-editor-engine.md) | T1-07 ~ T1-10 |
+| Plan 3 | workspace（open/save/rfd/recent + Error） | [2026-06-18-workspace.md](superpowers/plans/2026-06-18-workspace.md) | T1-02, T1-11 ~ T1-13, T1-15 |
+| Plan 4 | markdown_renderer source + zdown-app（高亮 + 编辑视图 + 菜单 + 快捷键） | [2026-06-18-markdown-renderer-source-and-zdown-app.md](superpowers/plans/2026-06-18-markdown-renderer-source-and-zdown-app.md) | T1-16, T1-18 ~ T1-22 |
+
+**关键设计决策（已敲定，见各 plan）：**
+
+- 源码语法高亮放 `markdown_renderer` source 模块；syntect 用默认嵌入语法集与主题
+- `Workspace` 有状态：持有 `Option<PathBuf>`，`open` 设置路径，`save` 写当前路径，`save_as` 更新路径
+- 最近文件独立 TOML（`<config_dir>/zdown/recent.toml`），最多 10 条，canonicalize 去重
+- `Command` 用 enum（非 trait），`apply` 返回 `AppliedCommand` 携带 undo 信息
+- `Cursor { line, col }`，col 为字符列（非字节列）
+- AST 分 `Block` / `Inline` 两层，不携带 source span
+
+**对原 TASKS.md（粗版）的调整：**
+
+- **删除 T1-14 文件监听**：notify 推迟到阶段 3 与多文件管理一起做
+- **T1-17 行号渲染并入 Plan 4**：行号是编辑器装饰，放 zdown-app 而非 markdown_renderer
+- **T1-19 高亮降级**：egui 0.34 `TextEdit::multiline` 不暴露内部布局，行内高亮不可行；阶段 1 用单色编辑（路径 B），高亮推迟到阶段 2 hybrid 模式
+- **T1-08 Command 设计重写**：从 trait + 单 Cursor 改为 enum + AppliedCommand（含 undo 信息），支持选区
+
+**收尾任务（4 个 plan 完成后执行，不在 plan 内）：**
+
+- [ ] **T1-23** 各 crate 单元测试覆盖率 ≥ 80%（用 `cargo-llvm-cov`，排除 zdown-app）
+- [ ] **T1-24** 性能测试：≥ 1MB Markdown 文件 `parse` + `Buffer::from_str` < 200ms（仅测核心，UI 渲染手动评估）
+- [ ] **T1-25** 集成测试：编辑→保存→重开内容一致（Plan 2 `edit_save_reopen_content_consistent` 部分覆盖，补完整链路测试）
+- [ ] **T1-26** 更新 ROADMAP.md 标注阶段 1 关闭 + 高亮降级说明 + 加 T2-XX 阶段 2 补高亮任务
+
+---
+
+### 阶段 1 验收（汇总）
+
+完成 4 个 plan + T1-23 ~ T1-26 后，需同时满足：
+
+1. Windows：`cargo build --workspace` 通过
+2. Windows：`cargo run -p zdown-app` 可打开/编辑/保存 Markdown 文件（手动确认）
+3. Windows：`cargo test --workspace` 全绿
+4. Windows：`cargo clippy --workspace --all-targets -- -D warnings` 无警告
+5. `cargo fmt --check` 通过
+6. Linux / macOS CI：`cargo build --workspace` 通过（rfd 已引入，Linux gtk 已装）
+7. 各库 crate 单元测试覆盖率 ≥ 80%
+8. ≥ 1MB 文件 `parse` + `Buffer::from_str` < 200ms
+9. 编辑→保存→重开内容一致
+
+**降级说明**：阶段 1 不实现行内语法高亮（egui 0.34 限制），推到阶段 2。其余验收项必须满足。
+
+满足后，阶段 1 关闭，进入阶段 2（届时展开阶段 2 任务清单）。
+
+---
+
 ## 后续阶段（待细化）
 
-- 阶段 1 MVP：进入实施前展开
-- 阶段 2 渲染与所见即所得：进入实施前展开
-- 阶段 3 个性化与多文件：进入实施前展开
+- 阶段 2 渲染与所见即所得：进入实施前展开（含补阶段 1 高亮降级）
+- 阶段 3 个性化与多文件：进入实施前展开（含文件监听 notify）
 - 阶段 4 高级功能：按子里程碑（图床 / 导出 / mermaid / HTML / i18n / 终端 / AI / 插件）分别展开
 
 不在本文件预先列出，避免任务清单过早固化。

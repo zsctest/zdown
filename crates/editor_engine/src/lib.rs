@@ -1,29 +1,27 @@
-//! editor_engine crate 占位骨架（阶段 0）
+//! editor_engine：文本编辑引擎。
 //!
-//! 实际职责见 docs/ARCHITECTURE.md §2.2。文本缓冲、光标、撤销重做在阶段 1 实施。
+//! 对外暴露 Buffer / Cursor / Selection / Command / Editor / Error。
+//! 实际职责见 docs/ARCHITECTURE.md §2.2。
 
-use thiserror::Error;
+pub mod buffer;
+pub mod command;
+pub mod cursor;
+pub mod editor;
+pub mod error;
+pub mod history;
 
-/// editor_engine 错误类型骨架。
-///
-/// 阶段 1 起按需扩展缓冲区操作、光标、撤销重做等错误变体。
-#[derive(Debug, Error)]
-pub enum Error {
-    /// 占位变体：对应功能在后续阶段实施。
-    #[error("功能尚未实现（阶段 0 占位）")]
-    NotImplemented,
-}
+pub use buffer::Buffer;
+pub use command::{AppliedCommand, Command};
+pub use cursor::{Cursor, Selection};
+pub use editor::Editor;
+pub use error::Error;
+pub use history::History;
+
+/// crate 级 Result 别名。
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
 mod tests {
-    use super::Error;
-
-    #[test]
-    fn error_display() {
-        let err = Error::NotImplemented;
-        assert_eq!(err.to_string(), "功能尚未实现（阶段 0 占位）");
-    }
-
     #[test]
     fn crate_loads() {
         assert_eq!(env!("CARGO_PKG_NAME"), "editor_engine");

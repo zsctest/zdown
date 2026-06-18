@@ -1,29 +1,23 @@
-//! workspace crate 占位骨架（阶段 0）
+//! workspace：文件 IO 与项目管理。
 //!
-//! 实际职责见 docs/ARCHITECTURE.md §2.5。文件 IO、最近文件、文件监听在阶段 1 实施。
+//! 对外暴露 Workspace / pick_open_file / pick_save_file / RecentFiles / Error。
+//! 实际职责见 docs/ARCHITECTURE.md §2.5。
 
-use thiserror::Error;
+pub mod dialog;
+pub mod error;
+pub mod recent;
+pub mod workspace;
 
-/// workspace 错误类型骨架。
-///
-/// 阶段 1 起按需扩展文件 IO、监听等错误变体。
-#[derive(Debug, Error)]
-pub enum Error {
-    /// 占位变体：对应功能在后续阶段实施。
-    #[error("功能尚未实现（阶段 0 占位）")]
-    NotImplemented,
-}
+pub use dialog::{pick_open_file, pick_save_file};
+pub use error::Error;
+pub use recent::RecentFiles;
+pub use workspace::Workspace;
+
+/// crate 级 Result 别名。
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
 mod tests {
-    use super::Error;
-
-    #[test]
-    fn error_display() {
-        let err = Error::NotImplemented;
-        assert_eq!(err.to_string(), "功能尚未实现（阶段 0 占位）");
-    }
-
     #[test]
     fn crate_loads() {
         assert_eq!(env!("CARGO_PKG_NAME"), "workspace");

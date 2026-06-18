@@ -1,12 +1,14 @@
-//! zdown-app 二进制 crate（阶段 0）。
-//!
-//! 当前职责：初始化 tracing，启动一个显示 "zdown skeleton" 占位内容的 egui 窗口。
-//! 多 crate 编排与编辑功能在后续阶段逐步加入。
+//! zdown-app：egui 应用入口（阶段 1）。
 
+mod editor_state;
+mod menu;
+mod source_view;
+
+use editor_state::EditorState;
 use eframe::egui;
+use menu::ConfirmDialog;
 
 fn main() -> eframe::Result {
-    // 初始化 tracing：优先读 RUST_LOG，缺失时退回 info 级别。
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -14,10 +16,8 @@ fn main() -> eframe::Result {
         )
         .init();
 
-    tracing::info!("zdown 启动（阶段 0 骨架）");
+    tracing::info!("zdown 启动（阶段 1）");
 
-    // CI smoke 模式：仅验证初始化与依赖加载，不启动 GUI 窗口。
-    // 用法：ZDOWN_SMOKE=1 cargo run -p zdown-app
     if std::env::var_os("ZDOWN_SMOKE").is_some() {
         tracing::info!("ZDOWN_SMOKE 已设置，跳过 GUI 启动");
         return Ok(());
@@ -28,17 +28,29 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
 
-    eframe::run_ui_native("zdown", options, |ui, _frame| {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
-            ui.heading("zdown skeleton");
-        });
-    })
+    eframe::run_native(
+        "zdown",
+        options,
+        Box::new(|_cc| Ok(Box::new(ZdownApp::default()))),
+    )
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_loads() {
-        assert_eq!(env!("CARGO_PKG_NAME"), "zdown-app");
+#[derive(Default)]
+struct ZdownApp {
+    state: EditorState,
+    confirm: ConfirmDialog,
+}
+
+impl eframe::App for ZdownApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        menu::show_menu(ui, &mut self.state, &mut self.confirm);
+        menu::handle_shortcuts(&ctx, &mut self.state, &mut self.confirm);
+        menu::show_confirm_dialog(&ctx, &mut self.state, &mut self.confirm);
+        source_view::show_source_view(ui, &mut self.state);
+
+        if self.state.should_exit {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
     }
 }

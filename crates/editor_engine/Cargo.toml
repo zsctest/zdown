@@ -10,3 +10,4 @@ workspace = true
 
 [dependencies]
 thiserror.workspace = true
+ropey.workspace = true

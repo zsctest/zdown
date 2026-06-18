@@ -1,29 +1,30 @@
-//! document_model crate 占位骨架（阶段 0）
+//! document_model：Markdown 文档数据模型。
 //!
-//! 实际职责见 docs/ARCHITECTURE.md §2.1。AST 类型、解析、序列化在阶段 1 实施。
+//! 对外暴露 `Document`、`parse`、`to_markdown`、`Error`。
+//! 实际职责见 docs/ARCHITECTURE.md §2.1。
 
-use thiserror::Error;
+pub mod ast;
+pub mod error;
+pub mod parse;
+pub mod serialize;
 
-/// document_model 错误类型骨架。
-///
-/// 阶段 1 起按需扩展解析、序列化等错误变体。
-#[derive(Debug, Error)]
-pub enum Error {
-    /// 占位变体：对应功能在后续阶段实施。
-    #[error("功能尚未实现（阶段 0 占位）")]
-    NotImplemented,
+pub use ast::*;
+pub use error::Error;
+pub use parse::parse;
+pub use serialize::to_markdown;
+
+/// crate 级 Result 别名。
+pub type Result<T> = std::result::Result<T, Error>;
+
+impl Document {
+    /// 序列化为 Markdown 源码（委托到 `to_markdown` 顶层函数）。
+    pub fn to_markdown(&self) -> String {
+        crate::to_markdown(self)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Error;
-
-    #[test]
-    fn error_display() {
-        let err = Error::NotImplemented;
-        assert_eq!(err.to_string(), "功能尚未实现（阶段 0 占位）");
-    }
-
     #[test]
     fn crate_loads() {
         assert_eq!(env!("CARGO_PKG_NAME"), "document_model");
