@@ -13,9 +13,9 @@ pub mod history;
 pub use buffer::Buffer;
 pub use command::{AppliedCommand, Command};
 pub use cursor::{Cursor, Selection};
+pub use editor::Editor;
 pub use error::Error;
 pub use history::History;
-// TODO(任务 3): pub use editor::Editor;
 
 /// crate 级 Result 别名。
 pub type Result<T> = std::result::Result<T, Error>;
