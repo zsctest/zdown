@@ -35,61 +35,85 @@ fn render_block(ui: &mut egui::Ui, block: &Block) {
 }
 
 fn render_heading(ui: &mut egui::Ui, h: &Heading) {
-    // 标题用 inlines_to_richtext（接受 emph/strong 退化为纯文本，
-    // 因 ui.heading 接受 RichText 不接受多个 label）
-    let text = inlines_to_richtext(&h.inlines);
-    let richtext = match h.level {
-        1 => text.heading(),
-        2 => text.size(24.0).strong(),
-        3 => text.size(20.0).strong(),
-        4 => text.size(18.0).strong(),
-        5 => text.size(16.0).strong(),
-        _ => text.size(14.0).strong(),
-    };
-    ui.heading(richtext);
-}
-
-fn render_paragraph(ui: &mut egui::Ui, p: &Paragraph) {
-    // egui 的 RichText 不支持片段级样式混合，段落用 horizontal_wrapped
-    // + 逐 inline 渲染。标题/表头仍用 inlines_to_richtext（接受退化）。
+    let font_id = heading_font_id(ui, h.level);
     ui.horizontal_wrapped(|ui| {
-        render_inlines(ui, &p.inlines);
+        render_inlines(ui, &h.inlines, &font_id);
     });
 }
 
-/// 逐 inline 渲染段落内片段，支持 emph/strong/code/link/image 样式。
-fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline]) {
+fn heading_font_id(ui: &egui::Ui, level: u8) -> egui::FontId {
+    // 用 heading 样式的字号，strong 权重
+    let heading_style = ui
+        .style()
+        .text_styles
+        .get(&egui::TextStyle::Heading)
+        .cloned()
+        .unwrap_or_else(|| egui::FontId::monospace(20.0));
+    match level {
+        1 => heading_style,
+        2 => egui::FontId::new(24.0, heading_style.family),
+        3 => egui::FontId::new(20.0, heading_style.family),
+        4 => egui::FontId::new(18.0, heading_style.family),
+        5 => egui::FontId::new(16.0, heading_style.family),
+        _ => egui::FontId::new(14.0, heading_style.family),
+    }
+}
+
+fn render_paragraph(ui: &mut egui::Ui, p: &Paragraph) {
+    let font_id = ui
+        .style()
+        .text_styles
+        .get(&egui::TextStyle::Body)
+        .cloned()
+        .unwrap_or_else(egui::FontId::default);
+    ui.horizontal_wrapped(|ui| {
+        render_inlines(ui, &p.inlines, &font_id);
+    });
+}
+
+/// 逐 inline 渲染片段，支持 emph/strong/code/link/image 样式。
+fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline], font_id: &egui::FontId) {
     for inline in inlines {
         match inline {
             Inline::Text(s) => {
-                ui.label(s);
+                ui.label(egui::RichText::new(s).font(font_id.clone()));
             }
             Inline::Emph(inner) => {
-                ui.label(egui::RichText::new(inlines_to_plain(inner)).italics());
+                ui.label(
+                    egui::RichText::new(inlines_to_plain(inner))
+                        .italics()
+                        .font(font_id.clone()),
+                );
             }
             Inline::Strong(inner) => {
-                ui.label(egui::RichText::new(inlines_to_plain(inner)).strong());
+                ui.label(
+                    egui::RichText::new(inlines_to_plain(inner))
+                        .strong()
+                        .font(font_id.clone()),
+                );
             }
             Inline::Code(s) => {
-                ui.label(egui::RichText::new(s).code());
+                ui.label(egui::RichText::new(s).code().font(font_id.clone()));
             }
             Inline::Link { text, url, .. } => {
-                ui.hyperlink_to(inlines_to_plain(text), url);
+                ui.hyperlink_to(
+                    egui::RichText::new(inlines_to_plain(text)).font(font_id.clone()),
+                    url,
+                );
             }
             Inline::Image { alt, url, .. } => {
-                ui.label(format!("[图片: {alt}]({url})"));
+                ui.label(
+                    egui::RichText::new(format!("[图片: {alt}]({url})")).font(font_id.clone()),
+                );
             }
             Inline::Html(s) => {
-                ui.label(egui::RichText::new(s).weak());
+                ui.label(egui::RichText::new(s).weak().font(font_id.clone()));
             }
             Inline::SoftBreak => {
-                // horizontal_wrapped 会自动换行，SoftBreak 用空格替代
-                ui.label(" ");
+                ui.label(egui::RichText::new(" ").font(font_id.clone()));
             }
             Inline::HardBreak => {
-                // horizontal_wrapped 内 ui.end_row() 不生效（它是 Grid/vertical 语义），
-                // 改用 \n label 强制换行（egui 0.34 RichText 支持 \n）
-                ui.label("\n");
+                ui.label(egui::RichText::new("\n").font(font_id.clone()));
             }
         }
     }
