@@ -11,10 +11,10 @@ pub mod error;
 pub mod history;
 
 pub use buffer::Buffer;
+pub use command::{AppliedCommand, Command};
 pub use cursor::{Cursor, Selection};
 pub use error::Error;
-// TODO(任务 2): pub use command::{AppliedCommand, Command};
-// TODO(任务 2): pub use history::History;
+pub use history::History;
 // TODO(任务 3): pub use editor::Editor;
 
 /// crate 级 Result 别名。
