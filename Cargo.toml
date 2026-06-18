@@ -70,6 +70,10 @@ rfd = "0.15"
 dirs = "5"
 toml = "0.8"
 
+# ---------- export_engine ----------
+genpdf = "0.2"
+font-kit = "0.14"
+
 # ---------- workspace 内部 path 依赖 ----------
 document_model = { path = "crates/document_model" }
 editor_engine = { path = "crates/editor_engine" }

@@ -1,29 +1,20 @@
-//! export_engine crate 占位骨架（阶段 0）
-//!
-//! 实际职责见 docs/ARCHITECTURE.md §2.4。HTML / PDF 导出在阶段 4 实施。
+//! export_engine：Markdown → PDF/HTML 导出（阶段 3）。
 
-use thiserror::Error;
+pub mod error;
+pub mod font;
+pub mod pdf;
+pub mod renderer;
+pub mod theme;
 
-/// export_engine 错误类型骨架。
-///
-/// 阶段 4 起按需扩展 HTML / PDF 导出等错误变体。
-#[derive(Debug, Error)]
-pub enum Error {
-    /// 占位变体：对应功能在后续阶段实施。
-    #[error("功能尚未实现（阶段 0 占位）")]
-    NotImplemented,
-}
+pub use error::Error;
+pub use pdf::generate_pdf;
+pub use theme::PdfConfig;
+
+/// crate 级 Result 别名。
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
 mod tests {
-    use super::Error;
-
-    #[test]
-    fn error_display() {
-        let err = Error::NotImplemented;
-        assert_eq!(err.to_string(), "功能尚未实现（阶段 0 占位）");
-    }
-
     #[test]
     fn crate_loads() {
         assert_eq!(env!("CARGO_PKG_NAME"), "export_engine");
