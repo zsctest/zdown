@@ -59,6 +59,7 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
     use document_model::ast::*;
+    use std::io::Write;
     use tempfile::NamedTempFile;
 
     fn sample_doc() -> Document {
@@ -70,9 +71,9 @@ mod tests {
     }
 
     fn write_temp(content: &str) -> (NamedTempFile, PathBuf) {
-        let f = NamedTempFile::new().expect("tempfile");
+        let mut f = NamedTempFile::new().expect("tempfile");
+        f.write_all(content.as_bytes()).expect("write");
         let path = f.path().to_path_buf();
-        std::fs::write(&path, content).expect("write");
         (f, path)
     }
 
@@ -90,6 +91,17 @@ mod tests {
         assert_eq!(ws.current_path(), Some(path.as_path()));
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(&doc.blocks[0], Block::Heading(_)));
+    }
+
+    #[test]
+    fn open_switches_current_path() {
+        let (_f1, path1) = write_temp("# a\n");
+        let (_f2, path2) = write_temp("# b\n");
+        let mut ws = Workspace::new();
+        ws.open(&path1).expect("open 1");
+        assert_eq!(ws.current_path(), Some(path1.as_path()));
+        ws.open(&path2).expect("open 2");
+        assert_eq!(ws.current_path(), Some(path2.as_path()));
     }
 
     #[test]
