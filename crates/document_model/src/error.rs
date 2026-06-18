@@ -1,9 +1,13 @@
-//! Error 类型（任务 4 中扩展变体）。
+//! document_model 错误类型。
 
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("功能尚未实现（阶段 0 占位）")]
-    NotImplemented,
+    /// 解析 Markdown 源码失败。
+    #[error("解析错误: {0}")]
+    Parse(String),
+    /// 序列化 AST 为 Markdown 失败。
+    #[error("序列化错误: {0}")]
+    Serialize(String),
 }
