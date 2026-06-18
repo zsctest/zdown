@@ -56,20 +56,6 @@ pub enum ViewMode {
 }
 
 impl ViewMode {
-    /// 快捷键切换：Ctrl+1/2/3。
-    pub fn from_key(mods: &egui::Modifiers, key: egui::Key) -> Option<Self> {
-        if mods.ctrl && !mods.shift {
-            match key {
-                egui::Key::1 => Some(Self::Source),
-                egui::Key::2 => Some(Self::Preview),
-                egui::Key::3 => Some(Self::Hybrid),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    }
-
     /// 中文名（菜单显示）。
     pub fn label(self) -> &'static str {
         match self {
@@ -79,9 +65,9 @@ impl ViewMode {
         }
     }
 }
-
-use eframe::egui;
 ```
+
+> **注意：** 不在 view_mode.rs 定义 `from_key`，直接在 main.rs 用 `ctx.input(|i| i.key_pressed(egui::Key::Num1))` 逐键判断，避免 `from_key` 成死代码。
 
 - [ ] **步骤 1.2：创建 preview_view.rs**
 
@@ -105,7 +91,7 @@ pub fn show_preview_view(ui: &mut egui::Ui, state: &mut EditorState) {
 
 - [ ] **步骤 1.3：修改 main.rs 集成视图模式**
 
-修改 `crates/zdown-app/src/main.rs`：
+修改 `crates/zdown-app/src/main.rs`。注意：本任务 `show_menu` 调用先用阶段 1 的 3 参数签名，任务 2 再改 4 参数：
 
 ```rust
 //! zdown-app：egui 应用入口（阶段 2）。
@@ -153,31 +139,29 @@ struct ZdownApp {
     state: EditorState,
     confirm: ConfirmDialog,
     view_mode: ViewMode,
+    /// 缓存上次窗口标题，避免每帧 send_viewport_cmd。
+    last_title: String,
 }
 
 impl eframe::App for ZdownApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // 注意：show_menu 调用先用 3 参数（阶段 1 签名），任务 2 改 4 参数
         menu::show_menu(ui, &mut self.state, &mut self.confirm);
         menu::handle_shortcuts(&ctx, &mut self.state, &mut self.confirm);
 
-        // 视图模式快捷键
-        let view_mode = &mut self.view_mode;
-        ctx.input(|i| {
-            if let Some(new_mode) = ViewMode::from_key(&i.modifiers, i.key_pressed(egui::Key::Num1).then(|| egui::Key::Num1).unwrap_or(egui::Key::Num1)) {
-                *view_mode = new_mode;
-            }
-        });
-
-        // 更优的快捷键处理
+        // 视图模式快捷键 Ctrl+1/2/3
         let mods = ctx.input(|i| i.modifiers);
-        if mods.ctrl {
+        if mods.ctrl && !mods.shift {
             if ctx.input(|i| i.key_pressed(egui::Key::Num1)) {
                 self.view_mode = ViewMode::Source;
+                tracing::info!("切换到源码模式");
             } else if ctx.input(|i| i.key_pressed(egui::Key::Num2)) {
                 self.view_mode = ViewMode::Preview;
+                tracing::info!("切换到预览模式");
             } else if ctx.input(|i| i.key_pressed(egui::Key::Num3)) {
                 self.view_mode = ViewMode::Hybrid;
+                tracing::info!("切换到 Hybrid 模式");
             }
         }
 
@@ -188,13 +172,20 @@ impl eframe::App for ZdownApp {
             ViewMode::Source => source_view::show_source_view(ui, &mut self.state),
             ViewMode::Preview => preview_view::show_preview_view(ui, &mut self.state),
             ViewMode::Hybrid => {
-                // 阶段 2 占位：Hybrid 暂用 Preview
+                // 阶段 2 占位：Hybrid 暂用 Preview，Plan 4 完整实现
                 preview_view::show_preview_view(ui, &mut self.state);
             }
         }
 
         if self.state.should_exit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
+        // 更新窗口标题（只在变化时发送，避免每帧触发窗口管理器）
+        let title = format!("{} [{}]", self.state.title(), self.view_mode.label());
+        if title != self.last_title {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            self.last_title = title;
         }
     }
 }
@@ -227,25 +218,87 @@ Ctrl+1/2/3 切换模式。Hybrid 暂占位用 Preview。"
 - 修改：`crates/zdown-app/src/menu.rs`
 - 修改：`crates/zdown-app/src/main.rs`
 
-- [ ] **步骤 2.1：menu.rs 加视图菜单**
+- [ ] **步骤 2.1：menu.rs 加视图菜单（完整 show_menu 函数）**
 
-修改 `crates/zdown-app/src/menu.rs`，在 `show_menu` 函数的"编辑"菜单后加"视图"菜单。需在 `show_menu` 签名加 `view_mode: &mut ViewMode` 参数：
+修改 `crates/zdown-app/src/menu.rs`，替换整个 `show_menu` 函数。在文件顶部加 `use crate::view_mode::ViewMode;`：
 
 ```rust
 use crate::view_mode::ViewMode;
 
+#[allow(deprecated)]
 pub fn show_menu(
     ui: &mut egui::Ui,
     state: &mut EditorState,
     confirm: &mut ConfirmDialog,
     view_mode: &mut ViewMode,
 ) {
-    #[allow(deprecated)]
     egui::TopBottomPanel::top("menu").show_inside(ui, |ui| {
         #[allow(deprecated)]
         egui::menu::bar(ui, |ui| {
-            // ... 文件菜单、编辑菜单保持不变 ...
-            
+            // 文件菜单
+            ui.menu_button("文件", |ui| {
+                if ui.button("新建 (Ctrl+N)").clicked() {
+                    if state.is_dirty() {
+                        confirm.pending = Some(PendingAction::New);
+                    } else {
+                        state.new_file();
+                    }
+                }
+                if ui.button("打开... (Ctrl+O)").clicked() {
+                    if state.is_dirty() {
+                        confirm.pending = Some(PendingAction::Open);
+                    } else {
+                        trigger_open(state);
+                    }
+                }
+                if ui.button("保存 (Ctrl+S)").clicked() {
+                    if state.current_path.is_none() {
+                        trigger_save_as(state);
+                    } else {
+                        let _ = state.save();
+                    }
+                }
+                if ui.button("另存为... (Ctrl+Shift+S)").clicked() {
+                    trigger_save_as(state);
+                }
+
+                ui.separator();
+
+                ui.menu_button("最近文件", |ui| {
+                    if state.recent.list().is_empty() {
+                        ui.label("(无)");
+                    } else {
+                        for path in state.recent.list().to_vec() {
+                            if ui.button(path.display().to_string()).clicked() {
+                                let _ = state.open(&path);
+                                ui.close();
+                            }
+                        }
+                    }
+                });
+
+                ui.separator();
+
+                if ui.button("退出").clicked() {
+                    if state.is_dirty() {
+                        confirm.pending = Some(PendingAction::Quit);
+                    } else {
+                        state.quit();
+                    }
+                }
+            });
+
+            // 编辑菜单
+            ui.menu_button("编辑", |ui| {
+                if ui.button("撤销 (Ctrl+Z)").clicked() {
+                    let _ = state.undo();
+                }
+                if ui.button("重做 (Ctrl+Y)").clicked() {
+                    let _ = state.redo();
+                }
+            });
+
+            // 视图菜单
             ui.menu_button("视图", |ui| {
                 if ui.button("源码 (Ctrl+1)").clicked() {
                     *view_mode = ViewMode::Source;
@@ -262,9 +315,9 @@ pub fn show_menu(
 }
 ```
 
-- [ ] **步骤 2.2：main.rs 更新 show_menu 调用**
+- [ ] **步骤 2.2：main.rs 更新 show_menu 调用为 4 参数**
 
-修改 `crates/zdown-app/src/main.rs` 的 `ZdownApp::ui`：
+修改 `crates/zdown-app/src/main.rs` 的 `ZdownApp::ui`，把任务 1.3 中的 `menu::show_menu(ui, &mut self.state, &mut self.confirm);` 改为：
 
 ```rust
 menu::show_menu(ui, &mut self.state, &mut self.confirm, &mut self.view_mode);

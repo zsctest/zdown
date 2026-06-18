@@ -25,12 +25,17 @@
 - **渲染接口**：`render(ui: &mut egui::Ui, doc: &Document)` — 无返回值，直接绘制到 ui
 - **代码块高亮**：复用 `SourceHighlighter::highlight(src, Some(lang))`，将 `StyledLine` 转为 egui `RichText` 颜色
 - **图片渲染**：阶段 2 仅显示占位符 `[图片: alt](url)`，实际图片加载留阶段 4（图床）
-- **表格渲染**：用 `egui::Grid` 布局
-- **快照测试**：egui 渲染难自动化测试，用结构断言（渲染后 ui 含预期数量 widget）+ 手动验证
+- **表格渲染**：用 `egui::Grid` 布局，按 `alignments` 应用列对齐
+- **`inlines_to_richtext` 用途**：用于标题/表头（接受 emph/strong 退化为纯文本，因 `ui.heading` 接受 `RichText` 不接受多个 label）；段落用 `render_inlines` 逐片段渲染（任务 3）
+- **`inlines_to_plain` 用途**：辅助函数，提取纯文本供 emph/strong/link 等的 RichText 构造
+- **spike 位置**：spike 在 markdown_renderer 内做，需先加 egui 依赖（任务 2.1 提前到任务 1 之前执行）
+- **快照测试**：egui 渲染难自动化测试，用结构断言（AST 结构完整性）+ 手动验证
 
 ---
 
 ## 任务 1：spike — 评估 egui 原生 widget 渲染能力
+
+**前置：** 先执行任务 2.1（修改 Cargo.toml 加 egui 依赖），否则 spike 编译失败。
 
 **文件：**
 - 无持久文件（spike 在临时文件中验证，验证后删除）
@@ -44,8 +49,9 @@
 ```rust
 //! spike：评估 egui 原生 widget 渲染 AST 节点的能力。
 //! 验证后删除此文件。
+//! 注意：用 `egui`（非 `eframe::egui`），markdown_renderer 只依赖 egui crate。
 
-use eframe::egui;
+use egui;
 use document_model::ast::*;
 
 pub fn spike_render(ui: &mut egui::Ui) {
@@ -181,11 +187,12 @@ mod tests {
 //! AST → egui widget 渲染。
 //!
 //! 对外暴露 `render(ui, doc)`，按 Block/Inline 分发。
+//! 注意：用 `egui`（非 `eframe::egui`），markdown_renderer 只依赖 egui crate。
 
-use eframe::egui;
+use egui;
 use document_model::ast::{
     Alignment, Block, BlockQuote, CodeBlock, Document, Heading, Inline, List,
-    Paragraph, Table, TableCell,
+    ListItem, Paragraph, Table, TableCell,
 };
 
 /// 将 `Document` 渲染到 egui UI。
@@ -200,7 +207,7 @@ fn render_block(ui: &mut egui::Ui, block: &Block) {
         Block::Heading(h) => render_heading(ui, h),
         Block::Paragraph(p) => render_paragraph(ui, p),
         Block::CodeBlock(cb) => render_code_block(ui, cb),
-        Block::List(l) => render_list(ui, l, 0),
+        Block::List(l) => render_list(ui, l.ordered, l.start, &l.items, 0),
         Block::BlockQuote(bq) => render_blockquote(ui, bq),
         Block::ThematicBreak => {
             ui.separator();
@@ -213,6 +220,8 @@ fn render_block(ui: &mut egui::Ui, block: &Block) {
 }
 
 fn render_heading(ui: &mut egui::Ui, h: &Heading) {
+    // 标题用 inlines_to_richtext（接受 emph/strong 退化为纯文本，
+    // 因 ui.heading 接受 RichText 不接受多个 label）
     let text = inlines_to_richtext(&h.inlines);
     let richtext = match h.level {
         1 => text.heading(),
@@ -226,6 +235,7 @@ fn render_heading(ui: &mut egui::Ui, h: &Heading) {
 }
 
 fn render_paragraph(ui: &mut egui::Ui, p: &Paragraph) {
+    // 任务 2 阶段先用 inlines_to_richtext，任务 3 改为 render_inlines
     ui.label(inlines_to_richtext(&p.inlines));
 }
 
@@ -239,11 +249,18 @@ fn render_code_block(ui: &mut egui::Ui, cb: &CodeBlock) {
     );
 }
 
-fn render_list(ui: &mut egui::Ui, l: &List, indent: usize) {
+/// 渲染列表。签名传 `&[ListItem]` 引用避免递归 clone（参考阶段 1 serialize.rs 修复）。
+fn render_list(
+    ui: &mut egui::Ui,
+    ordered: bool,
+    start: usize,
+    items: &[ListItem],
+    indent: usize,
+) {
     ui.vertical(|ui| {
-        for (i, item) in l.items.iter().enumerate() {
-            let marker = if l.ordered {
-                format!("{}. ", l.start + i)
+        for (i, item) in items.iter().enumerate() {
+            let marker = if ordered {
+                format!("{}. ", start + i)
             } else {
                 "• ".to_owned()
             };
@@ -253,7 +270,8 @@ fn render_list(ui: &mut egui::Ui, l: &List, indent: usize) {
             });
             if !item.sub_items.is_empty() {
                 ui.indent(format!("list_{indent}_{i}"), |ui| {
-                    render_list(ui, l, indent + 1);
+                    // 递归传 &item.sub_items（非父 List），避免无限递归
+                    render_list(ui, ordered, start, &item.sub_items, indent + 1);
                 });
             }
         }
@@ -272,25 +290,47 @@ fn render_blockquote(ui: &mut egui::Ui, bq: &BlockQuote) {
 }
 
 fn render_table(ui: &mut egui::Ui, t: &Table) {
-    egui::Grid::new(format!("table_{}", ui.id().value()))
+    // 用指针地址生成唯一 id，避免同帧多表格冲突
+    let table_id = egui::Id::new(format!("table_{:p}", t as *const _));
+    egui::Grid::new(table_id)
         .striped(true)
         .show(ui, |ui| {
-            // 表头
-            for cell in &t.header {
-                ui.label(inlines_to_richtext(&cell.inlines).strong());
+            // 表头（应用对齐）
+            for (col_idx, cell) in t.header.iter().enumerate() {
+                let align = t.alignments.get(col_idx).copied().flatten();
+                render_table_cell(ui, cell, align, true);
             }
             ui.end_row();
             // 数据行
             for row in &t.rows {
-                for cell in row {
-                    ui.label(inlines_to_richtext(&cell.inlines));
+                for (col_idx, cell) in row.iter().enumerate() {
+                    let align = t.alignments.get(col_idx).copied().flatten();
+                    render_table_cell(ui, cell, align, false);
                 }
                 ui.end_row();
             }
         });
 }
 
-/// 将 Inline 列表转为 egui RichText（含 emph/strong/code 风格）。
+/// 渲染表格单元格，应用对齐。
+fn render_table_cell(ui: &mut egui::Ui, cell: &TableCell, align: Option<Alignment>, is_header: bool) {
+    let richtext = inlines_to_richtext(&cell.inlines);
+    let richtext = if is_header { richtext.strong() } else { richtext };
+    let layout_job = richtext.into_layout_job();
+    // egui 0.34：用 ui.layout 对齐 galley
+    let galley = ui.fonts(|f| f.layout_job(layout_job));
+    let (rect, response) = ui.allocate_at_least(galley.size(), egui::Sense::hover());
+    let align_x = match align {
+        Some(Alignment::Left) | None => egui::Align::LEFT,
+        Some(Alignment::Center) => egui::Align::CENTER,
+        Some(Alignment::Right) => egui::Align::RIGHT,
+    };
+    let pos = egui::Align2([align_x, egui::Align::TOP]).align_size_within_rect(galley.size(), rect).min;
+    ui.painter().add(egui::epaint::Shape::galley(pos, galley, ui.visuals().text_color()));
+    let _ = response;
+}
+
+/// 将 Inline 列表转为 egui RichText（标题/表头用，emph/strong 退化为纯文本）。
 fn inlines_to_richtext(inlines: &[Inline]) -> egui::RichText {
     let mut text = String::new();
     for inline in inlines {
@@ -412,33 +452,20 @@ inlines_to_richtext/inlines_to_plain 辅助函数。
 - 修改：`crates/markdown_renderer/src/render.rs`
 - 测试：内联单元测试
 
-- [ ] **步骤 3.1：改进 inlines_to_richtext 支持 emph/strong/code 风格**
+- [ ] **步骤 3.1：改进段落渲染支持 emph/strong/code 片段级样式**
 
-egui 的 `RichText` 不支持片段级样式混合（一段文本要么全部 emph 要么全部 strong）。阶段 2 简化：用 `ui.horizontal` 逐 inline 渲染。
+egui 的 `RichText` 不支持片段级样式混合。段落用 `ui.horizontal_wrapped` + 逐 inline 渲染。标题/表头仍用 `inlines_to_richtext`（接受退化）。
 
-修改 `render.rs`，替换 `render_paragraph` 和 `render_heading`：
+修改 `render.rs`，替换 `render_paragraph`：
 
 ```rust
-fn render_heading(ui: &mut egui::Ui, h: &Heading) {
-    let richtext = inlines_to_richtext(&h.inlines);
-    let richtext = match h.level {
-        1 => richtext.heading(),
-        2 => richtext.size(24.0).strong(),
-        3 => richtext.size(20.0).strong(),
-        4 => richtext.size(18.0).strong(),
-        5 => richtext.size(16.0).strong(),
-        _ => richtext.size(14.0).strong(),
-    };
-    ui.heading(richtext);
-}
-
 fn render_paragraph(ui: &mut egui::Ui, p: &Paragraph) {
     ui.horizontal_wrapped(|ui| {
         render_inlines(ui, &p.inlines);
     });
 }
 
-/// 逐 inline 渲染，支持片段级样式。
+/// 逐 inline 渲染段落内片段，支持 emph/strong/code/link 样式。
 fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline]) {
     for inline in inlines {
         match inline {
@@ -464,44 +491,48 @@ fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline]) {
                 ui.label(egui::RichText::new(s).weak());
             }
             Inline::SoftBreak => {
-                ui.end_row();
+                // horizontal_wrapped 会自动换行，SoftBreak 用空格替代
+                ui.label(" ");
             }
             Inline::HardBreak => {
-                ui.end_row();
+                // 强制换行：用 ui.end_row() 在 horizontal_wrapped 内无效，
+                // 改用换行符 label（egui 0.34 RichText 支持 \n）
+                ui.label("\n");
             }
         }
     }
 }
 ```
 
+> **注意：** `ui.horizontal_wrapped` 内 `ui.end_row()` 不生效（它是 Grid/vertical 语义）。SoftBreak 用空格、HardBreak 用 `\n` label 是阶段 2 简化。阶段 3 完全自绘时改进。
+
 - [ ] **步骤 3.2：代码块高亮接入 SourceHighlighter**
 
-修改 `render.rs` 的 `render_code_block`：
+修改 `render.rs` 的 `render_code_block`，在文件顶部加 `use crate::source::SourceHighlighter;`（不要加未使用的 `FontStyle` import）：
 
 ```rust
+use crate::source::SourceHighlighter;
+
 fn render_code_block(ui: &mut egui::Ui, cb: &CodeBlock) {
-    // 尝试用 SourceHighlighter 高亮
     let highlighter = SourceHighlighter::new().ok();
     if let Some(h) = &highlighter {
         let lines = h.highlight(&cb.content, cb.language.as_deref());
-        ui.vertical(|ui| {
-            egui::Frame::group(ui.style())
-                .inner_margin(egui::Margin::same(4))
-                .show(ui, |ui| {
-                    for line in &lines {
-                        ui.horizontal(|ui| {
-                            for (style, text) in line {
-                                let color = egui::Color32::from_rgb(
-                                    style.foreground.r,
-                                    style.foreground.g,
-                                    style.foreground.b,
-                                );
-                                ui.label(egui::RichText::new(*text).color(color).monospace());
-                            }
-                        });
-                    }
-                });
-        });
+        egui::Frame::group(ui.style())
+            .inner_margin(egui::Margin::same(4))
+            .show(ui, |ui| {
+                for line in &lines {
+                    ui.horizontal(|ui| {
+                        for (style, text) in line {
+                            let color = egui::Color32::from_rgb(
+                                style.foreground.r,
+                                style.foreground.g,
+                                style.foreground.b,
+                            );
+                            ui.label(egui::RichText::new(*text).color(color).monospace());
+                        }
+                    });
+                }
+            });
     } else {
         // fallback：不高亮
         let mut text = cb.content.clone();
@@ -513,9 +544,6 @@ fn render_code_block(ui: &mut egui::Ui, cb: &CodeBlock) {
         );
     }
 }
-
-use crate::source::SourceHighlighter;
-use syntect::highlighting:: FontStyle;
 ```
 
 - [ ] **步骤 3.3：运行测试验证**
@@ -631,9 +659,8 @@ fn sample_doc() -> Document {
 }
 
 #[test]
-fn render_does_not_panic() {
-    // 验证 render 函数对各种 AST 节点不 panic
-    // egui 渲染需要 Context，这里只验证 AST 结构完整性
+fn sample_doc_structure_valid() {
+    // 验证 sample_doc 生成的 AST 结构完整（render 需 egui Context，这里只验证结构）
     let doc = sample_doc();
     assert_eq!(doc.blocks.len(), 8);
     
