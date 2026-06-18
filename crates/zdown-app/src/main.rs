@@ -3,6 +3,8 @@
 //! 当前职责：初始化 tracing，启动一个显示 "zdown skeleton" 占位内容的 egui 窗口。
 //! 多 crate 编排与编辑功能在后续阶段逐步加入。
 
+mod editor_state;
+
 use eframe::egui;
 
 fn main() -> eframe::Result {

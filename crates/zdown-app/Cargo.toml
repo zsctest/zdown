@@ -10,5 +10,13 @@ workspace = true
 
 [dependencies]
 eframe.workspace = true
+egui.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+editor_engine.workspace = true
+workspace.workspace = true
+document_model.workspace = true
+markdown_renderer.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

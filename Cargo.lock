@@ -4799,9 +4799,15 @@ dependencies = [
 name = "zdown-app"
 version = "0.0.0"
 dependencies = [
+ "document_model",
+ "editor_engine",
  "eframe",
+ "egui",
+ "markdown_renderer",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
+ "workspace",
 ]
 
 [[package]]
