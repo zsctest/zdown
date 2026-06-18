@@ -24,14 +24,14 @@ pub fn render_document(
     _fonts: &FontSet,
 ) -> Result<LinearLayout> {
     let mut layout = LinearLayout::vertical();
-    for (i, block) in doc.blocks.iter().enumerate() {
+    for (i, bws) in doc.blocks.iter().enumerate() {
         if i > 0 {
             let gap = config.theme.spacing.paragraph_gap;
             if gap > 0.0 {
                 layout.push(Break::new(1));
             }
         }
-        render_block(block, &config.theme, &mut layout)?;
+        render_block(&bws.block, &config.theme, &mut layout)?;
     }
     Ok(layout)
 }
@@ -130,8 +130,8 @@ fn render_code_block(cb: &CodeBlock, theme: &PdfTheme, layout: &mut LinearLayout
 
 fn render_blockquote(bq: &BlockQuote, theme: &PdfTheme, layout: &mut LinearLayout) {
     let mut inner = LinearLayout::vertical();
-    for block in &bq.blocks {
-        let _ = render_block(block, theme, &mut inner);
+    for bws in &bq.blocks {
+        let _ = render_block(&bws.block, theme, &mut inner);
     }
     layout.push(inner.framed().padded((0, 0, 0, 4)));
 }

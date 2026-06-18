@@ -70,13 +70,21 @@ pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     use crate::theme::PdfConfig;
-    use document_model::ast::{Block, Document, Inline, Paragraph as AstParagraph};
+    use document_model::ast::{
+        Block, BlockWithSpan, Document, Inline, Paragraph as AstParagraph, Span,
+    };
 
     fn sample_doc() -> Document {
         Document {
-            blocks: vec![Block::Paragraph(AstParagraph {
-                inlines: vec![Inline::Text("hello".into())],
-            })],
+            blocks: vec![BlockWithSpan {
+                block: Block::Paragraph(AstParagraph {
+                    inlines: vec![Inline::Text("hello".into())],
+                }),
+                span: Span {
+                    start_line: 0,
+                    end_line: 0,
+                },
+            }],
         }
     }
 
