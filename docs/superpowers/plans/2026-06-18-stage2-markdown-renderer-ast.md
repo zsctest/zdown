@@ -191,7 +191,7 @@ mod tests {
 
 use egui;
 use document_model::ast::{
-    Alignment, Block, BlockQuote, CodeBlock, Document, Heading, Inline, List,
+    Alignment, Block, BlockQuote, CodeBlock, Document, Heading, Inline,
     ListItem, Paragraph, Table, TableCell,
 };
 
@@ -279,6 +279,8 @@ fn render_list(
 }
 
 fn render_blockquote(ui: &mut egui::Ui, bq: &BlockQuote) {
+    // 注意：egui 0.34 的 Frame::group 签名可能是 Frame::group(style) 或 Frame::group(ui)。
+    // 若编译失败，按错误调整。
     egui::Frame::group(ui.style())
         .stroke(egui::Stroke::new(2.0, egui::Color32::LIGHT_BLUE))
         .inner_margin(egui::Margin::same(8))
@@ -313,6 +315,10 @@ fn render_table(ui: &mut egui::Ui, t: &Table) {
 }
 
 /// 渲染表格单元格，应用对齐。
+///
+/// 注意：egui 0.34 的 `epaint::Shape::galley` 签名可能不同，
+/// 且 `allocate_at_least` + `painter` 在 `Grid` 内可能绕过列宽跟踪。
+/// 若编译失败或列对齐错乱，按实际 API 调整，或改用 `ui.label` + `ui.with_layout`。
 fn render_table_cell(ui: &mut egui::Ui, cell: &TableCell, align: Option<Alignment>, is_header: bool) {
     let richtext = inlines_to_richtext(&cell.inlines);
     let richtext = if is_header { richtext.strong() } else { richtext };
@@ -723,6 +729,8 @@ git commit -m "test(markdown_renderer): 渲染快照结构断言测试
 3 个测试覆盖：render 不 panic（8 种 Block 节点）、空文档、嵌套列表结构。
 完整 GUI 渲染由手动验证。"
 ```
+
+> **注意：** Plan 4 任务 1 会改 `Document.blocks` 为 `Vec<BlockWithSpan>`，本测试届时需更新为 `BlockWithSpan { block: ..., span: ... }` 包装。Plan 4 任务 1.3 会处理此更新。
 
 ---
 

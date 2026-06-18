@@ -185,17 +185,19 @@ pub fn show_source_view(ui: &mut egui::Ui, state: &mut EditorState, highlighter:
     let src = state.editor.to_string();
 
     // 先处理输入事件（更新 editor），再渲染（避免一帧延迟）
+    // 注意：提前 clone ctx 避免 ui 借用冲突
+    let ctx = ui.ctx().clone();
     let input_response = ui.interact(
         ui.max_rect(),
         egui::Id::new("source_view_input"),
         egui::Sense::click_and_drag(),
     );
     if input_response.has_focus() {
-        handle_input(ui.ctx(), state);
+        handle_input(&ctx, state);
     }
-    // 点击获取焦点
+    // 点击获取焦点（egui 0.34 的 request_focus API 可能改名，按实际调整）
     if input_response.clicked() {
-        ui.ctx().memory_mut(|m| m.request_focus(egui::Id::new("source_view_input")));
+        ctx.memory_mut(|m| m.request_focus(egui::Id::new("source_view_input")));
     }
 
     egui::ScrollArea::vertical().show(ui, |ui| {
@@ -265,9 +267,11 @@ fn handle_input(ctx: &egui::Context, state: &mut EditorState) {
                 ..
             } => {
                 let cursor = state.editor.cursor;
-                let _ = state.apply(Command::Insert { pos: cursor, text: "\n".into() });
-                // 光标移到下一行行首
-                let _ = state.editor.set_cursor(Cursor::new(cursor.line + 1, 0));
+                // 先 apply 插入换行，成功后才 set_cursor
+                if state.apply(Command::Insert { pos: cursor, text: "\n".into() }).is_ok() {
+                    // 插入成功后 buffer 已更新，cursor.line + 1 有效
+                    let _ = state.editor.set_cursor(Cursor::new(cursor.line + 1, 0));
+                }
             }
             egui::Event::Key {
                 key: egui::Key::ArrowLeft,
@@ -317,20 +321,34 @@ fn handle_input(ctx: &egui::Context, state: &mut EditorState) {
                     let _ = state.editor.set_cursor(Cursor::new(target_line, new_col));
                 }
             }
+            egui::Event::Key {
+                key: egui::Key::Tab,
+                pressed: true,
+                ..
+            } => {
+                // 阶段 2：拦截 Tab 不处理（避免焦点跳转），阶段 3 实现 Tab 缩进
+            }
             _ => {}
         }
     }
 }
 
 /// 渲染高亮文本 + 光标矩形。
+///
+/// 注意：egui 0.34 的 `painter.galley` / `fonts(|f| f.layout_no_wrap(...))` API
+/// 可能略有不同。若编译失败，按错误调整（如 `f.layout(...)` 或 `Shape::galley`）。
 fn render_text_with_cursor(
     ui: &mut egui::Ui,
     src: &str,
     cursor: Cursor,
     highlighter: Option<&SourceHighlighter>,
 ) {
-    let font_id = egui::FontId::monospace(14.0);
-    let row_height = 18.0; // 近似等宽字体行高，实际用 ui.text_style_height
+    // 从 egui style 获取等宽字体字号，避免硬编码
+    let font_id = ui.style().text_styles
+        .get(&egui::TextStyle::Monospace)
+        .cloned()
+        .unwrap_or_else(|| egui::FontId::monospace(14.0));
+    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
 
     if let Some(h) = highlighter {
         let lines = h.highlight(src, None);
@@ -387,6 +405,7 @@ fn render_text_with_cursor(
 }
 
 /// 计算光标前一个位置。
+/// 注意：Plan 4 任务 2.2 会改为 `pub(crate)` 供 hybrid_view 复用。
 fn prev_cursor(buffer: &editor_engine::Buffer, cursor: Cursor) -> Option<Cursor> {
     if cursor.col > 0 {
         Some(Cursor::new(cursor.line, cursor.col - 1))
@@ -400,6 +419,7 @@ fn prev_cursor(buffer: &editor_engine::Buffer, cursor: Cursor) -> Option<Cursor>
 }
 
 /// 计算光标后一个位置。
+/// 注意：Plan 4 任务 2.2 会改为 `pub(crate)` 供 hybrid_view 复用。
 fn next_cursor(buffer: &editor_engine::Buffer, cursor: Cursor) -> Option<Cursor> {
     let line_len = buffer.line_len_chars(cursor.line).ok()?;
     if cursor.col < line_len {
@@ -414,6 +434,8 @@ fn next_cursor(buffer: &editor_engine::Buffer, cursor: Cursor) -> Option<Cursor>
     }
 }
 ```
+
+> **注意：** 任务 1 的 `highlight_source` 函数在本任务被 `render_text_with_cursor` 替代，执行者应删除 `highlight_source`（避免死代码）。
 
 - [ ] **步骤 2.2：编译验证 + smoke + clippy**
 

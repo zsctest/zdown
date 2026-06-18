@@ -343,59 +343,32 @@ show_menu 签名加 view_mode 参数。"
 
 ---
 
-## 任务 3：实时预览 + 模式切换不丢失光标
+## 任务 3：实时预览验证
 
-**文件：**
-- 修改：`crates/zdown-app/src/preview_view.rs`
-- 修改：`crates/zdown-app/src/main.rs`
+**文件：** 无（验证任务）
 
-- [ ] **步骤 3.1：实时预览（每次 update 重新 parse + render）**
+- [ ] **步骤 3.1：验证实时预览 + 模式切换不丢失光标**
 
-`preview_view::show_preview_view` 已实现实时预览（每次调用 `state.current_doc()` 重新 parse）。验证切换模式后光标位置保留。
+任务 1.3 的 main.rs 已实现：
+- 视图模式快捷键 Ctrl+1/2/3 + tracing 日志（任务 1.3 行 154-166）
+- 标题栏含模式名 + last_title 缓存（任务 1.3 行 184-189）
+- preview_view 每帧重新 parse + render（任务 1.2 的 `state.current_doc()`）
 
-修改 `crates/zdown-app/src/main.rs`，在视图模式切换时记录日志：
-
-```rust
-// 视图模式快捷键处理
-let mods = ctx.input(|i| i.modifiers);
-if mods.ctrl {
-    if ctx.input(|i| i.key_pressed(egui::Key::Num1)) {
-        self.view_mode = ViewMode::Source;
-        tracing::info!("切换到源码模式");
-    } else if ctx.input(|i| i.key_pressed(egui::Key::Num2)) {
-        self.view_mode = ViewMode::Preview;
-        tracing::info!("切换到预览模式");
-    } else if ctx.input(|i| i.key_pressed(egui::Key::Num3)) {
-        self.view_mode = ViewMode::Hybrid;
-        tracing::info!("切换到 Hybrid 模式");
-    }
-}
-```
-
-- [ ] **步骤 3.2：标题栏显示当前模式**
-
-修改 `main.rs`，在 `ZdownApp::ui` 末尾加：
-
-```rust
-// 更新窗口标题（含模式信息）
-let title = format!("{} [{}]", self.state.title(), self.view_mode.label());
-ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
-```
-
-- [ ] **步骤 3.3：编译验证 + smoke + clippy**
-
-运行：`cargo build -p zdown-app && ZDOWN_SMOKE=1 cargo run -p zdown-app && cargo clippy -p zdown-app --all-targets -- -D warnings`
-预期：全部通过。
-
-- [ ] **步骤 3.4：Commit**
+本任务只需验证，无需改代码。运行：
 
 ```bash
-git add crates/zdown-app/src/preview_view.rs crates/zdown-app/src/main.rs
-git commit -m "feat(zdown-app): 实时预览 + 标题栏模式显示
+cargo build -p zdown-app && ZDOWN_SMOKE=1 cargo run -p zdown-app && cargo clippy -p zdown-app --all-targets -- -D warnings
+```
 
-预览模式每次 update 重新 parse + render（实时）。
-切换模式记录 tracing 日志。
-窗口标题含当前模式名。"
+预期：全部通过。
+
+- [ ] **步骤 3.2：Commit（仅验证，无代码改动则跳过 commit）**
+
+若 clippy/fmt 有修复：
+
+```bash
+git add -A
+git commit -m "chore: Plan 2 实时预览验证通过"
 ```
 
 ---

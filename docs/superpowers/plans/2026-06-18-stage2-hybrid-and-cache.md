@@ -70,36 +70,68 @@ pub struct Document {
 
 > **注意：** 这会破坏阶段 1 的 `Document { blocks: Vec<Block> }`。阶段 1 的测试、serialize.rs、round_trip.rs 需相应更新。执行者需搜索所有 `Document { blocks:` 与 `doc.blocks[` 的用法，更新为 `BlockWithSpan`。
 
-- [ ] **步骤 1.2：parse.rs 填充 span**
+- [ ] **步骤 1.2：parse.rs 填充 span（精确跟踪）**
 
-修改 `crates/document_model/src/parse.rs`，在 `BuilderStack` 的 `Frame::Root` 改为收集 `Vec<BlockWithSpan>`，`push_block` 时记录当前行号。
-
-pulldown-cmark 0.13 的 `Event::Start(Tag)` 不直接携带 range，但 `Parser` 的 `offset` 可用，或用 `Range` 系列 API。简化方案：用文本行计数器，每次 `Event::Text` 含 `\n` 时累加，`End` 时记录 span。
+修改 `crates/document_model/src/parse.rs`，在 `BuilderStack` 加行计数器 + 在 `Frame` 加 `start_line` 字段：
 
 ```rust
-// 在 BuilderStack 加行计数器
 struct BuilderStack {
     stack: Vec<Frame>,
     current_line: usize,  // 当前行号（0-based）
 }
 
-// push_block 时创建 BlockWithSpan
-fn push_block(&mut self, block: Block) {
-    let span = Span {
-        start_line: self.current_line,  // 简化：用当前行作为 span 起点
-        end_line: self.current_line,    // 实际应跟踪 block 结束行
-    };
-    // ... 推入 BlockWithSpan { block, span }
+// 在每个会产出 Block 的 Frame 变体加 start_line 字段
+// 例如：
+// Frame::Paragraph { inlines, start_line }
+// Frame::Heading { level, inlines, start_line }
+// Frame::CodeBlock { language, content, start_line }
+// ... 其他 Block 类型同理
+```
+
+行号跟踪逻辑：
+- `start_tag` 时：记录 `start_line = self.current_line`，推入带 start_line 的 Frame
+- `handle` 的 `Event::Text(s)`：统计 `s` 中 `\n` 数量，累加到 `current_line`
+- `handle` 的 `Event::SoftBreak` / `Event::HardBreak`：`current_line += 1`
+- `end_tag` 时：弹出 Frame，用 `start_line` 和 `current_line` 构造 `Span { start_line, end_line: current_line }`，包入 `BlockWithSpan`
+
+```rust
+// end_tag 示例（Paragraph）
+TagEnd::Paragraph => {
+    if let Some(Frame::Paragraph { inlines, start_line }) = self.stack.pop() {
+        let p = Paragraph { inlines };
+        let span = Span { start_line, end_line: self.current_line };
+        self.push_block_with_span(Block::Paragraph(p), span);
+    }
+}
+
+// push_block_with_span
+fn push_block_with_span(&mut self, block: Block, span: Span) {
+    match self.stack.last_mut() {
+        Some(Frame::Root(blocks)) | Some(Frame::BlockQuote(blocks)) => {
+            blocks.push(BlockWithSpan { block, span });
+        }
+        _ => {}
+    }
 }
 ```
 
-> **执行者注意：** 精确 span 跟踪较复杂（需在每次 Text/SoftBreak/HardBreak 事件更新行号）。阶段 2 简化：每个 block 的 span 用其 End 事件时的行号作为 end_line，Start 事件时的行号作为 start_line。具体实现时需在 `start_tag` 记录 start_line，`end_tag` 记录 end_line。
+> **执行者注意：** 需给所有会产出 Block 的 Frame 变体（Paragraph/Heading/CodeBlock/BlockQuote/List/Table/TableRow/TableCell）加 `start_line` 字段。ThematicBreak 由 `Event::Rule` 直接 push，用当前 `current_line` 作为 start 和 end。HtmlBlock 同理。
 
-- [ ] **步骤 1.3：更新阶段 1 测试**
+- [ ] **步骤 1.3：更新阶段 1 测试（含 span 处理）**
 
-阶段 1 的测试（round_trip.rs、serialize.rs 等）用 `Document { blocks: vec![Block::Heading(...)] }`，需改为 `Document { blocks: vec![BlockWithSpan { block: Block::Heading(...), span: Span { start_line: 0, end_line: 0 } }] }`。
+阶段 1 的测试用 `Document { blocks: vec![Block::Heading(...)] }`，需改为 `Document { blocks: vec![BlockWithSpan { block: Block::Heading(...), span: Span { start_line: 0, end_line: 0 } }] }`。
 
 搜索所有 `Document { blocks:` 与 `Block::` 直接在 blocks vec 内的用法，更新为 `BlockWithSpan { block: ..., span: ... }`。
+
+**往返测试特殊处理**：`round_trip.rs` 的 `ast_to_markdown_back_to_ast` 测试比较 `assert_eq!(reparsed, original)`。手工构造的 `original` 的 span 是 `Span { start_line: 0, end_line: 0 }`，但 `reparsed` 的 span 是 parse 填充的实际行号，会不一致。**修复**：改为只比较 block 内容，忽略 span：
+
+```rust
+// 原断言：assert_eq!(reparsed, original);
+// 改为：
+let original_blocks: Vec<_> = original.blocks.into_iter().map(|bws| bws.block).collect();
+let reparsed_blocks: Vec<_> = reparsed.blocks.into_iter().map(|bws| bws.block).collect();
+assert_eq!(reparsed_blocks, original_blocks);
+```
 
 - [ ] **步骤 1.4：编译验证 + 测试**
 
@@ -152,14 +184,18 @@ pub fn show_hybrid_view(
     let src = state.editor.to_string();
     let cursor_line = state.editor.cursor.line;
 
-    // 先处理输入（复用 source_view 的 handle_input 逻辑）
+    // 先处理输入（复用 source_view 的 prev_cursor/next_cursor + 同样的键处理逻辑）
+    let ctx = ui.ctx().clone();
     let input_response = ui.interact(
         ui.max_rect(),
         egui::Id::new("hybrid_view_input"),
         egui::Sense::click_and_drag(),
     );
     if input_response.has_focus() {
-        handle_input_hybrid(ui.ctx(), state);
+        handle_input_hybrid(&ctx, state);
+    }
+    if input_response.clicked() {
+        ctx.memory_mut(|m| m.request_focus(egui::Id::new("hybrid_view_input")));
     }
 
     let doc = state.current_doc();
@@ -180,7 +216,15 @@ pub fn show_hybrid_view(
                 // 光标 block：源码高亮 + 光标
                 let cursor_bws = &doc.blocks[idx];
                 let cursor_block_src = extract_block_src(&src, cursor_bws.span);
-                render_source_block_with_cursor(ui, &cursor_block_src, state.editor.cursor, highlighter);
+                // 光标在 block 内的相对行号
+                let relative_cursor_line = cursor_line - cursor_bws.span.start_line;
+                render_source_block_with_cursor(
+                    ui,
+                    &cursor_block_src,
+                    relative_cursor_line,
+                    state.editor.cursor.col,
+                    highlighter,
+                );
 
                 // 光标 block 之后的 block：全渲染
                 for bws in &doc.blocks[idx + 1..] {
@@ -197,7 +241,6 @@ pub fn show_hybrid_view(
 
 /// 渲染单个 Block（用于非光标 block）。
 fn render_single_block(ui: &mut egui::Ui, block: &document_model::ast::Block) {
-    // 构造只含单个 block 的临时 Document 调用 markdown_renderer::render
     let doc = document_model::Document {
         blocks: vec![document_model::ast::BlockWithSpan {
             block: block.clone(),
@@ -216,41 +259,49 @@ fn extract_block_src(src: &str, span: document_model::ast::Span) -> String {
         .collect()
 }
 
-/// 渲染源码 block + 光标（复用 source_view 的逻辑）。
+/// 渲染源码 block + 光标（光标行用背景色标记）。
 fn render_source_block_with_cursor(
     ui: &mut egui::Ui,
     block_src: &str,
-    cursor: Cursor,
+    relative_cursor_line: usize,
+    cursor_col: usize,
     highlighter: Option<&SourceHighlighter>,
 ) {
-    // 调用 source_view 的 render_text_with_cursor（需在 source_view 暴露为 pub(crate)）
-    // 或在此重新实现简化版
     if let Some(h) = highlighter {
         let lines = h.highlight(block_src, None);
         ui.vertical(|ui| {
             for (line_idx, line) in lines.iter().enumerate() {
+                let is_cursor_line = line_idx == relative_cursor_line;
                 ui.horizontal(|ui| {
+                    let mut col = 0;
                     for (style, text) in line {
                         let color = egui::Color32::from_rgb(
                             style.foreground.r,
                             style.foreground.g,
                             style.foreground.b,
                         );
-                        ui.label(egui::RichText::new(*text).color(color).monospace());
+                        // 光标所在片段用背景色标记
+                        let is_cursor_fragment = is_cursor_line
+                            && col <= cursor_col
+                            && cursor_col < col + text.chars().count();
+                        let richtext = egui::RichText::new(*text).color(color).monospace();
+                        if is_cursor_fragment {
+                            ui.label(richtext.background_color(egui::Color32::from_rgb(80, 80, 80)));
+                        } else {
+                            ui.label(richtext);
+                        }
+                        col += text.chars().count();
                     }
-                    let _ = line_idx;
                 });
             }
         });
     } else {
         ui.label(egui::RichText::new(block_src).monospace());
     }
-    let _ = cursor;  // 阶段 2 简化：hybrid 模式光标用背景色标记，精确像素定位留阶段 3
 }
 
-/// 处理输入（复用 source_view 逻辑，需提取为共享函数或重新实现）。
+/// 处理输入（复用 source_view 的 prev_cursor/next_cursor + 同样的键处理逻辑）。
 fn handle_input_hybrid(ctx: &egui::Context, state: &mut EditorState) {
-    // 同 source_view::handle_input，建议提取到 editor_state 或共享模块
     let events = ctx.input(|i| i.events.clone());
     for event in events {
         match event {
@@ -262,36 +313,81 @@ fn handle_input_hybrid(ctx: &egui::Context, state: &mut EditorState) {
             }
             egui::Event::Key { key: egui::Key::Backspace, pressed: true, .. } => {
                 let cursor = state.editor.cursor;
-                if cursor.col > 0 || cursor.line > 0 {
-                    let prev = crate::source_view::prev_cursor_pub(&state.editor.buffer, cursor);
-                    if let Some(prev) = prev {
-                        let _ = state.apply(Command::Delete {
-                            range: editor_engine::Selection::new(prev, cursor),
-                        });
-                        let _ = state.editor.set_cursor(prev);
-                    }
+                if let Some(prev) = crate::source_view::prev_cursor(&state.editor.buffer, cursor) {
+                    let _ = state.apply(Command::Delete {
+                        range: editor_engine::Selection::new(prev, cursor),
+                    });
+                    let _ = state.editor.set_cursor(prev);
                 }
             }
-            // ... 其余键处理同 source_view，或提取共享函数
+            egui::Event::Key { key: egui::Key::Delete, pressed: true, .. } => {
+                let cursor = state.editor.cursor;
+                if let Some(next) = crate::source_view::next_cursor(&state.editor.buffer, cursor) {
+                    let _ = state.apply(Command::Delete {
+                        range: editor_engine::Selection::new(cursor, next),
+                    });
+                    let _ = state.editor.set_cursor(next);
+                }
+            }
+            egui::Event::Key { key: egui::Key::Enter, pressed: true, .. } => {
+                let cursor = state.editor.cursor;
+                if state.apply(Command::Insert { pos: cursor, text: "\n".into() }).is_ok() {
+                    let _ = state.editor.set_cursor(Cursor::new(cursor.line + 1, 0));
+                }
+            }
+            egui::Event::Key { key: egui::Key::ArrowLeft, pressed: true, .. } => {
+                let cursor = state.editor.cursor;
+                if let Some(prev) = crate::source_view::prev_cursor(&state.editor.buffer, cursor) {
+                    let _ = state.editor.set_cursor(prev);
+                }
+            }
+            egui::Event::Key { key: egui::Key::ArrowRight, pressed: true, .. } => {
+                let cursor = state.editor.cursor;
+                if let Some(next) = crate::source_view::next_cursor(&state.editor.buffer, cursor) {
+                    let _ = state.editor.set_cursor(next);
+                }
+            }
+            egui::Event::Key { key: egui::Key::ArrowUp, pressed: true, .. } => {
+                let cursor = state.editor.cursor;
+                if cursor.line > 0 {
+                    let target_line = cursor.line - 1;
+                    let max_col = state.editor.buffer.line_len_chars(target_line).unwrap_or(0);
+                    let new_col = cursor.col.min(max_col);
+                    let _ = state.editor.set_cursor(Cursor::new(target_line, new_col));
+                }
+            }
+            egui::Event::Key { key: egui::Key::ArrowDown, pressed: true, .. } => {
+                let cursor = state.editor.cursor;
+                let line_count = state.editor.buffer.len_lines();
+                if cursor.line + 1 < line_count {
+                    let target_line = cursor.line + 1;
+                    let max_col = state.editor.buffer.line_len_chars(target_line).unwrap_or(0);
+                    let new_col = cursor.col.min(max_col);
+                    let _ = state.editor.set_cursor(Cursor::new(target_line, new_col));
+                }
+            }
+            egui::Event::Key { key: egui::Key::Tab, pressed: true, .. } => {
+                // 阶段 2：拦截 Tab，阶段 3 实现 Tab 缩进
+            }
             _ => {}
         }
     }
 }
 ```
 
-> **执行者注意：** `handle_input_hybrid` 与 `source_view::handle_input` 逻辑相同。建议在任务实现时把 `handle_input`、`prev_cursor`、`next_cursor` 提取到 `editor_state.rs` 或新的共享模块（如 `input.rs`），避免重复。本 plan 标注为待重构，执行者按实际情况决定。
+> **执行者注意：** `handle_input_hybrid` 与 `source_view::handle_input` 逻辑重复。阶段 3 建议提取到共享模块（如 `input.rs`）。本 plan 暂保留重复以避免跨 plan 重构。
 
 - [ ] **步骤 2.2：source_view.rs 暴露 prev_cursor/next_cursor 为 pub(crate)**
 
-修改 `crates/zdown-app/src/source_view.rs`，把 `prev_cursor` 和 `next_cursor` 改为 `pub(crate)`：
+修改 `crates/zdown-app/src/source_view.rs`，把 `prev_cursor` 和 `next_cursor` 的 `fn` 改为 `pub(crate) fn`（函数名不变，任务 2.1 的 hybrid_view 调用 `crate::source_view::prev_cursor` / `crate::source_view::next_cursor`）：
 
 ```rust
 pub(crate) fn prev_cursor(buffer: &editor_engine::Buffer, cursor: editor_engine::Cursor) -> Option<editor_engine::Cursor> {
-    // ... 原实现
+    // ... 原实现不变
 }
 
 pub(crate) fn next_cursor(buffer: &editor_engine::Buffer, cursor: editor_engine::Cursor) -> Option<editor_engine::Cursor> {
-    // ... 原实现
+    // ... 原实现不变
 }
 ```
 
