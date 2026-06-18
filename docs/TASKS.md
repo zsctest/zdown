@@ -158,14 +158,63 @@
 
 **降级说明**：阶段 1 不实现行内语法高亮（egui 0.34 限制），推到阶段 2。其余验收项必须满足。✅ 已满足
 
-满足后，阶段 1 关闭，进入阶段 2（届时展开阶段 2 任务清单）。
+满足后，阶段 1 关闭，进入阶段 2（届时展开阶段 2 任务清单）。✅ 阶段 1 已关闭
+
+---
+
+## 阶段 2 — 渲染与所见即所得
+
+目标：支持源码 / 预览 / hybrid 三种视图切换 + 补阶段 1 高亮与增量编辑降级。
+
+**实施计划**：拆分为 4 个独立 plan，按依赖顺序执行。每个 plan 含完整 TDD 步骤，详见各自文档。
+
+| Plan | 范围 | 详细文档 | 状态 |
+| --- | --- | --- | --- |
+| Plan 1 | markdown_renderer AST 渲染（Block/Inline + 代码块高亮 + 快照测试） | [2026-06-18-stage2-markdown-renderer-ast.md](superpowers/plans/2026-06-18-stage2-markdown-renderer-ast.md) | 待实施 |
+| Plan 2 | zdown-app 视图模式切换（Source/Preview/Hybrid + Ctrl+1/2/3 + 实时预览） | [2026-06-18-stage2-view-mode-switch.md](superpowers/plans/2026-06-18-stage2-view-mode-switch.md) | 待实施 |
+| Plan 3 | 补阶段 1 高亮 + 增量编辑（source_view 重构 + 行内高亮 + Command） | [2026-06-18-stage2-highlight-and-incremental-edit.md](superpowers/plans/2026-06-18-stage2-highlight-and-incremental-edit.md) | 待实施 |
+| Plan 4 | hybrid 模式 + 渲染缓存（光标行源码 + 其余渲染 + RenderCache + 性能） | [2026-06-18-stage2-hybrid-and-cache.md](superpowers/plans/2026-06-18-stage2-hybrid-and-cache.md) | 待实施 |
+
+**关键设计决策（已敲定，见各 plan）：**
+
+- AST 渲染策略：spike 后决定（优先 egui 原生 widget）
+- 渲染接口：`render(ui: &mut egui::Ui, doc: &Document)`
+- 代码块高亮：复用阶段 1 `SourceHighlighter`，syntect Style 颜色转 egui Color32
+- 图片渲染：阶段 2 用文本占位符 `[图片: alt](url)`，实际图片留阶段 4
+- ViewMode：Source/Preview/Hybrid，默认 Source，Ctrl+1/2/3 切换
+- hybrid 分割：按光标所在行分割，光标行源码高亮，其余 AST 渲染
+- 渲染缓存：`RenderCache` 用 `HashMap<u64, Document>`，缓存 parse 结果（egui widget 不可序列化）
+- 增量编辑：输入事件转 `editor_engine::Command`，恢复 undo 历史
+
+**对阶段 1 降级的补救：**
+
+- 行内语法高亮：Plan 3 source_view 重构接入 SourceHighlighter
+- 增量编辑命令：Plan 3 输入事件转 Command，恢复 undo 历史
+
+---
+
+### 阶段 2 验收（汇总）
+
+完成 4 个 plan 后，需同时满足：
+
+1. Windows：`cargo build --workspace` 通过
+2. Windows：`cargo run -p zdown-app` 三种视图模式切换正常（手动确认）
+3. Windows：`cargo test --workspace` 全绿
+4. Windows：`cargo clippy --workspace --all-targets -- -D warnings` 无警告
+5. `cargo fmt --check` 通过
+6. Linux / macOS CI：`cargo build --workspace` 通过
+7. 渲染常见 Markdown 文档无错位（手动确认）
+8. 三种模式切换不丢失光标位置（手动确认）
+9. hybrid 模式编辑流畅（输入延迟 < 50ms，性能测试验证）
+10. 渲染快照测试通过
+
+满足后，阶段 2 关闭，进入阶段 3（届时展开阶段 3 任务清单）。
 
 ---
 
 ## 后续阶段（待细化）
 
-- 阶段 2 渲染与所见即所得：进入实施前展开（含补阶段 1 高亮降级）
-- 阶段 3 个性化与多文件：进入实施前展开（含文件监听 notify）
+- 阶段 3 个性化与多文件：进入实施前展开（含文件监听 notify、选区编辑、完全自绘文本）
 - 阶段 4 高级功能：按子里程碑（图床 / 导出 / mermaid / HTML / i18n / 终端 / AI / 插件）分别展开
 
 不在本文件预先列出，避免任务清单过早固化。
