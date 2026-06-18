@@ -50,8 +50,49 @@ fn render_heading(ui: &mut egui::Ui, h: &Heading) {
 }
 
 fn render_paragraph(ui: &mut egui::Ui, p: &Paragraph) {
-    // 任务 2 阶段先用 inlines_to_richtext，任务 3 改为 render_inlines
-    ui.label(inlines_to_richtext(&p.inlines));
+    // egui 的 RichText 不支持片段级样式混合，段落用 horizontal_wrapped
+    // + 逐 inline 渲染。标题/表头仍用 inlines_to_richtext（接受退化）。
+    ui.horizontal_wrapped(|ui| {
+        render_inlines(ui, &p.inlines);
+    });
+}
+
+/// 逐 inline 渲染段落内片段，支持 emph/strong/code/link/image 样式。
+fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline]) {
+    for inline in inlines {
+        match inline {
+            Inline::Text(s) => {
+                ui.label(s);
+            }
+            Inline::Emph(inner) => {
+                ui.label(egui::RichText::new(inlines_to_plain(inner)).italics());
+            }
+            Inline::Strong(inner) => {
+                ui.label(egui::RichText::new(inlines_to_plain(inner)).strong());
+            }
+            Inline::Code(s) => {
+                ui.label(egui::RichText::new(s).code());
+            }
+            Inline::Link { text, url, .. } => {
+                ui.hyperlink_to(inlines_to_plain(text), url);
+            }
+            Inline::Image { alt, url, .. } => {
+                ui.label(format!("[图片: {alt}]({url})"));
+            }
+            Inline::Html(s) => {
+                ui.label(egui::RichText::new(s).weak());
+            }
+            Inline::SoftBreak => {
+                // horizontal_wrapped 会自动换行，SoftBreak 用空格替代
+                ui.label(" ");
+            }
+            Inline::HardBreak => {
+                // horizontal_wrapped 内 ui.end_row() 不生效（它是 Grid/vertical 语义），
+                // 改用 \n label 强制换行（egui 0.34 RichText 支持 \n）
+                ui.label("\n");
+            }
+        }
+    }
 }
 
 fn render_code_block(ui: &mut egui::Ui, cb: &CodeBlock) {
