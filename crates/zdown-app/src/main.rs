@@ -1,10 +1,12 @@
 //! zdown-app：egui 应用入口（阶段 1）。
 
 mod editor_state;
+mod menu;
 mod source_view;
 
 use editor_state::EditorState;
 use eframe::egui;
+use menu::ConfirmDialog;
 
 fn main() -> eframe::Result {
     tracing_subscriber::fmt()
@@ -36,10 +38,19 @@ fn main() -> eframe::Result {
 #[derive(Default)]
 struct ZdownApp {
     state: EditorState,
+    confirm: ConfirmDialog,
 }
 
 impl eframe::App for ZdownApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        menu::show_menu(ui, &mut self.state, &mut self.confirm);
+        menu::handle_shortcuts(&ctx, &mut self.state, &mut self.confirm);
+        menu::show_confirm_dialog(&ctx, &mut self.state, &mut self.confirm);
         source_view::show_source_view(ui, &mut self.state);
+
+        if self.state.should_exit {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
     }
 }
