@@ -1,6 +1,7 @@
 //! zdown-app：egui 应用入口（阶段 2）。
 
 mod editor_state;
+mod hybrid_view;
 mod menu;
 mod preview_view;
 mod source_view;
@@ -46,6 +47,8 @@ struct ZdownApp {
     last_title: String,
     /// 缓存 SourceHighlighter 避免每帧重建。
     highlighter: Option<markdown_renderer::SourceHighlighter>,
+    /// 渲染缓存（LRU 10 条）。
+    render_cache: markdown_renderer::RenderCache,
 }
 
 impl Default for ZdownApp {
@@ -56,6 +59,7 @@ impl Default for ZdownApp {
             view_mode: ViewMode::default(),
             last_title: String::new(),
             highlighter: markdown_renderer::SourceHighlighter::new().ok(),
+            render_cache: markdown_renderer::RenderCache::new(),
         }
     }
 }
@@ -88,10 +92,16 @@ impl eframe::App for ZdownApp {
         // 根据视图模式渲染
         match self.view_mode {
             ViewMode::Source => source_view::show_source_view(ui, &mut self.state, highlighter),
-            ViewMode::Preview => preview_view::show_preview_view(ui, &mut self.state),
+            ViewMode::Preview => {
+                preview_view::show_preview_view(ui, &mut self.state, &mut self.render_cache);
+            }
             ViewMode::Hybrid => {
-                // 阶段 2 占位：Hybrid 暂用 Preview，Plan 4 完整实现
-                preview_view::show_preview_view(ui, &mut self.state);
+                hybrid_view::show_hybrid_view(
+                    ui,
+                    &mut self.state,
+                    highlighter,
+                    &mut self.render_cache,
+                );
             }
         }
 

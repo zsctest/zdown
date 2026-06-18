@@ -5,7 +5,7 @@ pub mod render;
 pub mod source;
 
 pub use error::Error;
-pub use render::render;
+pub use render::{RenderCache, render};
 pub use source::{SourceHighlighter, StyledLine};
 
 #[cfg(test)]

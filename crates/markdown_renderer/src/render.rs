@@ -265,6 +265,67 @@ fn inlines_to_plain(inlines: &[Inline]) -> String {
     text
 }
 
+use std::collections::{HashMap, VecDeque};
+
+/// 渲染缓存。key 为源码 hash，value 为解析后的 Document。
+/// LRU 上限 10 条，超出丢弃最旧。
+/// 无 Mutex（egui 单线程），用 &mut self。
+pub struct RenderCache {
+    cache: HashMap<u64, Document>,
+    lru_keys: VecDeque<u64>,
+    max_entries: usize,
+}
+
+impl RenderCache {
+    pub fn new() -> Self {
+        Self {
+            cache: HashMap::new(),
+            lru_keys: VecDeque::new(),
+            max_entries: 10,
+        }
+    }
+
+    /// 解析源码，缓存结果。若同 hash 已缓存则直接返回。
+    pub fn parse_cached(&mut self, src: &str) -> Document {
+        let hash = hash_src(src);
+        if let Some(doc) = self.cache.get(&hash) {
+            // LRU 更新：移到队首
+            self.lru_keys.retain(|&k| k != hash);
+            self.lru_keys.push_front(hash);
+            return doc.clone();
+        }
+        let doc = document_model::parse(src).unwrap_or(Document { blocks: vec![] });
+        // 超限丢弃最旧
+        while self.lru_keys.len() >= self.max_entries {
+            if let Some(old_key) = self.lru_keys.pop_back() {
+                self.cache.remove(&old_key);
+            }
+        }
+        self.cache.insert(hash, doc.clone());
+        self.lru_keys.push_front(hash);
+        doc
+    }
+
+    /// 清空缓存（文档切换时调用）。
+    pub fn clear(&mut self) {
+        self.cache.clear();
+        self.lru_keys.clear();
+    }
+}
+
+impl Default for RenderCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn hash_src(src: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    src.hash(&mut hasher);
+    hasher.finish()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
