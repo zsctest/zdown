@@ -66,7 +66,7 @@ fn find_system_font(name: &str) -> Option<Vec<u8>> {
     let handle = source
         .select_best_match(
             &[font_kit::family_name::FamilyName::Title(name.into())],
-            &font_kit::properties::Properties::new()
+            font_kit::properties::Properties::new()
                 .style(font_kit::properties::Style::Normal),
         )
         .ok()?;
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn load_with_embedded_ttf() {
         let mut config = PdfConfig::default();
-        let dummy_ttf = include_bytes!("../../editor_engine/src/buffer.rs")[..100].to_vec();
+        let dummy_ttf = b"not a valid ttf font file".to_vec();
         config.theme.body_font.ttf_data = Some(dummy_ttf.clone());
         config.theme.mono_font.ttf_data = Some(dummy_ttf.clone());
         config.theme.heading_font.ttf_data = Some(dummy_ttf);
