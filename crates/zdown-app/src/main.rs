@@ -2,6 +2,7 @@
 
 mod editor_state;
 mod hybrid_view;
+mod input;
 mod menu;
 mod preview_view;
 mod source_view;

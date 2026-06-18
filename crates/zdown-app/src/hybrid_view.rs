@@ -6,7 +6,6 @@ use eframe::egui;
 use markdown_renderer::SourceHighlighter;
 
 use crate::editor_state::EditorState;
-use editor_engine::{Command, Cursor};
 
 /// 渲染 hybrid 视图。
 pub fn show_hybrid_view(
@@ -26,7 +25,7 @@ pub fn show_hybrid_view(
         egui::Sense::click_and_drag(),
     );
     if input_response.has_focus() {
-        handle_input_hybrid(&ctx, state);
+        crate::input::handle_input(&ctx, state);
     }
     if input_response.clicked() {
         ctx.memory_mut(|m| m.request_focus(egui::Id::new("hybrid_view_input")));
@@ -137,117 +136,5 @@ fn render_source_block_with_cursor(
         });
     } else {
         ui.label(egui::RichText::new(block_src).monospace());
-    }
-}
-
-/// 处理输入（复用 source_view 的 prev_cursor/next_cursor + 同样的键处理逻辑）。
-fn handle_input_hybrid(ctx: &egui::Context, state: &mut EditorState) {
-    let events = ctx.input(|i| i.events.clone());
-    for event in events {
-        match event {
-            egui::Event::Text(text) => {
-                if !text.is_empty() {
-                    let cursor = state.editor.cursor;
-                    let _ = state.apply(Command::Insert { pos: cursor, text });
-                }
-            }
-            egui::Event::Key {
-                key: egui::Key::Backspace,
-                pressed: true,
-                ..
-            } => {
-                let cursor = state.editor.cursor;
-                if let Some(prev) = crate::source_view::prev_cursor(&state.editor.buffer, cursor) {
-                    let _ = state.apply(Command::Delete {
-                        range: editor_engine::Selection::new(prev, cursor),
-                    });
-                    let _ = state.editor.set_cursor(prev);
-                }
-            }
-            egui::Event::Key {
-                key: egui::Key::Delete,
-                pressed: true,
-                ..
-            } => {
-                let cursor = state.editor.cursor;
-                if let Some(next) = crate::source_view::next_cursor(&state.editor.buffer, cursor) {
-                    let _ = state.apply(Command::Delete {
-                        range: editor_engine::Selection::new(cursor, next),
-                    });
-                    let _ = state.editor.set_cursor(next);
-                }
-            }
-            egui::Event::Key {
-                key: egui::Key::Enter,
-                pressed: true,
-                ..
-            } => {
-                let cursor = state.editor.cursor;
-                if state
-                    .apply(Command::Insert {
-                        pos: cursor,
-                        text: "\n".into(),
-                    })
-                    .is_ok()
-                {
-                    let _ = state.editor.set_cursor(Cursor::new(cursor.line + 1, 0));
-                }
-            }
-            egui::Event::Key {
-                key: egui::Key::ArrowLeft,
-                pressed: true,
-                ..
-            } => {
-                let cursor = state.editor.cursor;
-                if let Some(prev) = crate::source_view::prev_cursor(&state.editor.buffer, cursor) {
-                    let _ = state.editor.set_cursor(prev);
-                }
-            }
-            egui::Event::Key {
-                key: egui::Key::ArrowRight,
-                pressed: true,
-                ..
-            } => {
-                let cursor = state.editor.cursor;
-                if let Some(next) = crate::source_view::next_cursor(&state.editor.buffer, cursor) {
-                    let _ = state.editor.set_cursor(next);
-                }
-            }
-            egui::Event::Key {
-                key: egui::Key::ArrowUp,
-                pressed: true,
-                ..
-            } => {
-                let cursor = state.editor.cursor;
-                if cursor.line > 0 {
-                    let target_line = cursor.line - 1;
-                    let max_col = state.editor.buffer.line_len_chars(target_line).unwrap_or(0);
-                    let new_col = cursor.col.min(max_col);
-                    let _ = state.editor.set_cursor(Cursor::new(target_line, new_col));
-                }
-            }
-            egui::Event::Key {
-                key: egui::Key::ArrowDown,
-                pressed: true,
-                ..
-            } => {
-                let cursor = state.editor.cursor;
-                let line_count = state.editor.buffer.len_lines();
-                if cursor.line + 1 < line_count {
-                    let target_line = cursor.line + 1;
-                    let max_col = state.editor.buffer.line_len_chars(target_line).unwrap_or(0);
-                    let new_col = cursor.col.min(max_col);
-                    let _ = state.editor.set_cursor(Cursor::new(target_line, new_col));
-                }
-            }
-            egui::Event::Key {
-                key: egui::Key::Tab,
-                pressed: true,
-                ..
-            } => {
-                // 阶段 2：拦截 Tab，阶段 3 实现 Tab 缩进
-            }
-            _ => {}
-        }
     }
 }
