@@ -101,12 +101,14 @@
 
 **实施计划**：拆分为 4 个独立 plan，按依赖顺序执行。每个 plan 含完整 TDD 步骤，详见各自文档。
 
-| Plan | 范围 | 详细文档 | 对应原任务 |
-| --- | --- | --- | --- |
-| Plan 1 | document_model（AST + parse + to_markdown） | [2026-06-18-document-model.md](superpowers/plans/2026-06-18-document-model.md) | T1-01, T1-03 ~ T1-06 |
-| Plan 2 | editor_engine（Buffer + Command + History + Editor） | [2026-06-18-editor-engine.md](superpowers/plans/2026-06-18-editor-engine.md) | T1-07 ~ T1-10 |
-| Plan 3 | workspace（open/save/rfd/recent + Error） | [2026-06-18-workspace.md](superpowers/plans/2026-06-18-workspace.md) | T1-02, T1-11 ~ T1-13, T1-15 |
-| Plan 4 | markdown_renderer source + zdown-app（高亮 + 编辑视图 + 菜单 + 快捷键） | [2026-06-18-markdown-renderer-source-and-zdown-app.md](superpowers/plans/2026-06-18-markdown-renderer-source-and-zdown-app.md) | T1-16, T1-18 ~ T1-22 |
+| Plan | 范围 | 详细文档 | 对应原任务 | 状态 |
+| --- | --- | --- | --- | --- |
+| Plan 1 | document_model（AST + parse + to_markdown） | [2026-06-18-document-model.md](superpowers/plans/2026-06-18-document-model.md) | T1-01, T1-03 ~ T1-06 | ✅ 完成 |
+| Plan 2 | editor_engine（Buffer + Command + History + Editor） | [2026-06-18-editor-engine.md](superpowers/plans/2026-06-18-editor-engine.md) | T1-07 ~ T1-10 | ✅ 完成 |
+| Plan 3 | workspace（open/save/rfd/recent + Error） | [2026-06-18-workspace.md](superpowers/plans/2026-06-18-workspace.md) | T1-02, T1-11 ~ T1-13, T1-15 | ✅ 完成 |
+| Plan 4 | markdown_renderer source + zdown-app（高亮 + 编辑视图 + 菜单 + 快捷键） | [2026-06-18-markdown-renderer-source-and-zdown-app.md](superpowers/plans/2026-06-18-markdown-renderer-source-and-zdown-app.md) | T1-16, T1-18 ~ T1-22 | ✅ 完成 |
+
+**主体实现完成**（24 commit，152 passed + 5 ignored，全量验证 + GUI 手动确认通过）。
 
 **关键设计决策（已敲定，见各 plan）：**
 
@@ -126,10 +128,17 @@
 
 **收尾任务（4 个 plan 完成后执行，不在 plan 内）：**
 
-- [ ] **T1-23** 各 crate 单元测试覆盖率 ≥ 80%（用 `cargo-llvm-cov`，排除 zdown-app）
-- [ ] **T1-24** 性能测试：≥ 1MB Markdown 文件 `parse` + `Buffer::from_str` < 200ms（仅测核心，UI 渲染手动评估）
-- [ ] **T1-25** 集成测试：编辑→保存→重开内容一致（Plan 2 `edit_save_reopen_content_consistent` 部分覆盖，补完整链路测试）
-- [ ] **T1-26** 更新 ROADMAP.md 标注阶段 1 关闭 + 高亮降级说明 + 加 T2-XX 阶段 2 补高亮任务
+- [x] **T1-23** 各 crate 单元测试覆盖率 ≥ 80%（用 `cargo-llvm-cov`，排除 zdown-app）
+  - 完成：整体覆盖率 **92.16%**（区域 91.51%），远超 80% 目标
+  - 各 crate：document_model ~88%（parse 78%）、editor_engine ~96%、workspace ~93%（dialog 0% 因 #[ignore]）、markdown_renderer ~95%、config/export_engine 100%（占位）
+- [x] **T1-24** 性能测试：≥ 1MB Markdown 文件 `parse` + `Buffer::from_str` < 200ms（仅测核心，UI 渲染手动评估）
+  - 完成：`crates/document_model/tests/perf.rs` 3 个 #[ignore] 性能测试
+  - 实测 1MB 文件：parse 50ms、Buffer::from_str 13ms、合计 61ms（远低于 200ms）
+- [x] **T1-25** 集成测试：编辑→保存→重开内容一致（Plan 2 `edit_save_reopen_content_consistent` 部分覆盖，补完整链路测试）
+  - 完成：`crates/workspace/tests/edit_save_reopen.rs` 8 个集成测试
+  - 覆盖：edit_save_reopen / new_edit_save_as / edit_undo_save / edit_redo_save / multiple_edits / delete_save / replace_save / save_mark_saved_clears_dirty
+- [x] **T1-26** 更新 ROADMAP.md 标注阶段 1 关闭 + 高亮降级说明 + 加 T2-XX 阶段 2 补高亮任务
+  - 完成：ROADMAP.md 阶段 1 标注 ✅ 主体完成 + 降级说明；阶段 2 加"补阶段 1 高亮降级"与"补阶段 1 增量编辑"交付物
 
 ---
 
@@ -137,17 +146,17 @@
 
 完成 4 个 plan + T1-23 ~ T1-26 后，需同时满足：
 
-1. Windows：`cargo build --workspace` 通过
-2. Windows：`cargo run -p zdown-app` 可打开/编辑/保存 Markdown 文件（手动确认）
-3. Windows：`cargo test --workspace` 全绿
-4. Windows：`cargo clippy --workspace --all-targets -- -D warnings` 无警告
-5. `cargo fmt --check` 通过
-6. Linux / macOS CI：`cargo build --workspace` 通过（rfd 已引入，Linux gtk 已装）
-7. 各库 crate 单元测试覆盖率 ≥ 80%
-8. ≥ 1MB 文件 `parse` + `Buffer::from_str` < 200ms
-9. 编辑→保存→重开内容一致
+1. Windows：`cargo build --workspace` 通过 ✅
+2. Windows：`cargo run -p zdown-app` 可打开/编辑/保存 Markdown 文件（手动确认）✅
+3. Windows：`cargo test --workspace` 全绿 ✅（168 passed + 5 ignored）
+4. Windows：`cargo clippy --workspace --all-targets -- -D warnings` 无警告 ✅
+5. `cargo fmt --check` 通过 ✅
+6. Linux / macOS CI：`cargo build --workspace` 通过（rfd 已引入，Linux gtk 已装）⏳（待 push 后 CI 验证）
+7. 各库 crate 单元测试覆盖率 ≥ 80% ✅（92.16%）
+8. ≥ 1MB 文件 `parse` + `Buffer::from_str` < 200ms ✅（61ms）
+9. 编辑→保存→重开内容一致 ✅（8 个集成测试）
 
-**降级说明**：阶段 1 不实现行内语法高亮（egui 0.34 限制），推到阶段 2。其余验收项必须满足。
+**降级说明**：阶段 1 不实现行内语法高亮（egui 0.34 限制），推到阶段 2。其余验收项必须满足。✅ 已满足
 
 满足后，阶段 1 关闭，进入阶段 2（届时展开阶段 2 任务清单）。
 

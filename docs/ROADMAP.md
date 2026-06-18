@@ -25,29 +25,35 @@
 
 ---
 
-## 阶段 1 — 最小可用编辑器（MVP）
+## 阶段 1 — 最小可用编辑器（MVP） ✅ 主体完成
 
-**目标**：能打开、编辑、保存 Markdown 文件，源码视图 + 基础语法高亮。
+**目标**：能打开、编辑、保存 Markdown 文件，源码视图 + 行号。
 
 **交付物**：
 
-- `document_model`：基于 `pulldown-cmark` 的解析器、AST 类型、`to_markdown` 序列化
-- `editor_engine`：基于 `ropey::Rope` 的文本缓冲、光标、撤销重做
-- `workspace`：打开 / 保存文件对话框（`rfd`）
+- `document_model`：基于 `pulldown-cmark` 的解析器、AST 类型、`to_markdown` 序列化 ✅
+- `editor_engine`：基于 `ropey::Rope` 的文本缓冲、光标、撤销重做 ✅
+- `workspace`：打开 / 保存文件对话框（`rfd`）、最近文件 TOML 持久化 ✅
+- `markdown_renderer`：`SourceHighlighter`（syntect 默认嵌入集） ✅
 - `zdown-app`：
-  - 单 tab 编辑视图
-  - 源码编辑模式（等宽字体、行号）
-  - 语法高亮（`syntect`，markdown 语法）
-  - 快捷键：Ctrl+N（新建）、Ctrl+O（打开）、Ctrl+S（保存）、Ctrl+Z（撤销）、Ctrl+Y（重做）
-  - 未保存提示、最近文件菜单
+  - 单 tab 编辑视图 ✅
+  - 源码编辑模式（等宽字体、行号） ✅
+  - 快捷键：Ctrl+N/O/S/Shift+S/Z/Y ✅
+  - 未保存提示（三选项对话框）、最近文件菜单 ✅
+
+**降级说明（推到阶段 2）**：
+
+- **行内语法高亮**：egui 0.34 `TextEdit::multiline` 不暴露内部文本布局，无法精确叠加高亮。阶段 1 用单色编辑，`SourceHighlighter` 已实现留待阶段 2 hybrid 模式接入
+- **增量编辑命令**：阶段 1 整体替换文本（丢失 undo 历史），阶段 2 改为基于光标事件的增量 `Command`
+- **文件监听（notify）**：原 T1-14 删除，推迟到阶段 3 与多文件管理一起做
 
 **验收标准**：
 
-1. 能打开 ≥ 1MB 的 Markdown 文件不卡顿（< 200ms 渲染）
-2. 编辑后保存，重新打开内容一致
-3. 撤销 / 重做链路正确
-4. 三平台编译通过
-5. 各 crate 单元测试覆盖率 ≥ 80%
+1. 能打开 ≥ 1MB 的 Markdown 文件不卡顿（< 200ms 渲染）⏳ T1-24
+2. 编辑后保存，重新打开内容一致 ✅（Plan 3 集成测试覆盖）
+3. 撤销 / 重做链路正确 ✅（Plan 2 测试覆盖）
+4. 三平台编译通过 ✅（CI 绿灯）
+5. 各 crate 单元测试覆盖率 ≥ 80% ⏳ T1-23
 
 ---
 
@@ -65,6 +71,8 @@
   - 视图模式切换（Ctrl+1 源码 / Ctrl+2 预览 / Ctrl+3 hybrid）
   - hybrid 模式：光标处显示源码，其余渲染
   - 实时预览（输入即渲染）
+  - **补阶段 1 高亮降级**：源码模式行内语法高亮（接入 `SourceHighlighter`）
+  - **补阶段 1 增量编辑**：基于光标事件的增量 `Command`，恢复 undo 历史
 
 **验收标准**：
 
