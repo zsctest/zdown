@@ -218,4 +218,46 @@ mod tests {
         h.redo(&mut b).expect("redo");
         assert_eq!(b.to_string(), "hello");
     }
+
+    #[test]
+    fn clear_empties_both_stacks() {
+        let mut h = History::new();
+        let mut b = Buffer::from_str("");
+        let applied = Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "a".into(),
+        }
+        .apply(&mut b)
+        .expect("apply");
+        h.push(applied);
+        h.undo(&mut b).expect("undo");
+        assert!(h.can_undo() || h.can_redo());
+        h.clear();
+        assert!(!h.can_undo());
+        assert!(!h.can_redo());
+    }
+
+    #[test]
+    fn default_equals_new() {
+        let h1 = History::new();
+        let h2 = History::default();
+        assert_eq!(h1.len(), h2.len());
+        assert!(!h1.can_undo());
+        assert!(!h2.can_redo());
+    }
+
+    #[test]
+    fn replace_cross_line_undo() {
+        let mut h = History::new();
+        let mut b = Buffer::from_str("ab\ncd");
+        let cmd = Command::Replace {
+            range: Selection::new(Cursor::new(0, 1), Cursor::new(1, 1)),
+            text: "XY".into(),
+        };
+        let applied = cmd.apply(&mut b).expect("apply");
+        assert_eq!(b.to_string(), "aXYd");
+        h.push(applied);
+        h.undo(&mut b).expect("undo");
+        assert_eq!(b.to_string(), "ab\ncd");
+    }
 }

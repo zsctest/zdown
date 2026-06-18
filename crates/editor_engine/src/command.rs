@@ -59,15 +59,17 @@ impl Command {
                 buf.delete(*pos, end)?;
             }
             Command::Delete { range } => {
+                let (lo, _) = range.normalized();
                 if let Some(deleted) = &applied.deleted_text {
-                    buf.insert(range.start, deleted)?;
+                    buf.insert(lo, deleted)?;
                 }
             }
             Command::Replace { range, text } => {
-                let end = compute_end_cursor(buf, range.start, text)?;
-                buf.delete(range.start, end)?;
+                let (lo, _) = range.normalized();
+                let end = compute_end_cursor(buf, lo, text)?;
+                buf.delete(lo, end)?;
                 if let Some(deleted) = &applied.deleted_text {
-                    buf.insert(range.start, deleted)?;
+                    buf.insert(lo, deleted)?;
                 }
             }
         }
@@ -168,5 +170,18 @@ mod tests {
         assert_eq!(b.to_string(), "aXYZef");
         Command::undo(&applied, &mut b).expect("undo");
         assert_eq!(b.to_string(), original);
+    }
+
+    #[test]
+    fn replace_reversed_range_undo() {
+        let mut b = buf("abcdef");
+        let cmd = Command::Replace {
+            range: Selection::new(Cursor::new(0, 5), Cursor::new(0, 2)),
+            text: "X".into(),
+        };
+        let applied = cmd.apply(&mut b).expect("apply");
+        assert_eq!(b.to_string(), "abXf");
+        Command::undo(&applied, &mut b).expect("undo");
+        assert_eq!(b.to_string(), "abcdef");
     }
 }
