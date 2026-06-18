@@ -6,7 +6,7 @@ ATX 标题与段落混排。
 
 ### 含 emph 与 strong
 
-*emph* **strong** `code`.
+*emph* **strong** ***both*** `code`.
 
 ## 列表
 

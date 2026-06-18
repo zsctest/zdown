@@ -102,9 +102,13 @@ fn write_blockquote(out: &mut String, bq: &BlockQuote) {
         write_block(&mut inner, block);
     }
     for line in inner.lines() {
-        out.push_str("> ");
-        out.push_str(line);
-        out.push('\n');
+        if line.is_empty() {
+            out.push_str(">\n");
+        } else {
+            out.push_str("> ");
+            out.push_str(line);
+            out.push('\n');
+        }
     }
 }
 
