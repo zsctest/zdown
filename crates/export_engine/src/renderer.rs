@@ -4,7 +4,7 @@
 //! `render_inline_to_paragraph` applies per-inline styling
 //! (emph, strong, code, link, etc.) into a Paragraph.
 
-use genpdf::elements::{Break, LinearLayout, Paragraph};
+use genpdf::elements::{Break, FrameCellDecorator, LinearLayout, Paragraph, TableLayout};
 use genpdf::style::{Color, Style};
 use genpdf::Element;
 
@@ -54,7 +54,7 @@ fn render_block(
                     .padded((0, 4)),
             );
         }
-        Block::Table(t) => layout.push(render_table(t, theme)),
+        Block::Table(t) => render_table(t, theme, layout),
         Block::HtmlBlock(_) => {}
     }
     Ok(())
@@ -178,11 +178,90 @@ fn render_list(
     theme: &PdfTheme,
     layout: &mut LinearLayout,
 ) {
-    let _ = (ordered, start, items, depth, theme, layout);
-    todo!("render_list will be implemented in task 5")
+    for (i, item) in items.iter().enumerate() {
+        let marker = if ordered {
+            format!("{}. ", start + i)
+        } else {
+            "• ".to_owned()
+        };
+        let indent = theme.spacing.list_indent * (depth as f32);
+
+        let mut p = Paragraph::default();
+        p.push_styled(&marker, Style::new().with_font_size(theme.font_size.body as u8));
+        for inline in &item.inlines {
+            render_inline_to_paragraph(&mut p, inline, theme, theme.font_size.body);
+        }
+        layout.push(p.padded((0, 0, 0, indent)));
+
+        if !item.sub_items.is_empty() {
+            render_list(ordered, start, &item.sub_items, depth + 1, theme, layout);
+        }
+    }
 }
 
-fn render_table(t: &Table, theme: &PdfTheme) -> Paragraph {
-    let _ = (t, theme);
-    todo!("render_table will be implemented in task 5")
+fn render_table(
+    t: &Table,
+    theme: &PdfTheme,
+    layout: &mut LinearLayout,
+) {
+    let ncols = if !t.header.is_empty() {
+        t.header.len()
+    } else if let Some(row) = t.rows.first() {
+        row.len()
+    } else {
+        return;
+    };
+
+    let mut table_layout = TableLayout::new(vec![1; ncols]);
+    table_layout.set_cell_decorator(FrameCellDecorator::new(true, false, false));
+    let padding = theme.spacing.cell_padding;
+
+    // 表头行
+    if !t.header.is_empty() {
+        let header_style = Style::new()
+            .bold()
+            .with_font_size(theme.font_size.body as u8);
+        let mut row = table_layout.row();
+        for cell in &t.header {
+            let text = inlines_to_richtext_str(&cell.inlines);
+            row = row.element(Paragraph::new(text).styled(header_style).padded(padding));
+        }
+        let _ = row.push();
+    }
+
+    // 数据行
+    let cell_style = Style::new().with_font_size(theme.font_size.body as u8);
+    for row_data in &t.rows {
+        let mut row = table_layout.row();
+        for cell in row_data {
+            let text = inlines_to_richtext_str(&cell.inlines);
+            row = row.element(Paragraph::new(text).styled(cell_style).padded(padding));
+        }
+        let _ = row.push();
+    }
+
+    layout.push(table_layout);
+}
+
+/// 将 Inline 列表转为纯文本（用于表格单元格）。
+fn inlines_to_richtext_str(inlines: &[Inline]) -> String {
+    let mut text = String::new();
+    for inline in inlines {
+        match inline {
+            Inline::Text(s) => text.push_str(s),
+            Inline::Emph(inner) => text.push_str(&inlines_to_richtext_str(inner)),
+            Inline::Strong(inner) => text.push_str(&inlines_to_richtext_str(inner)),
+            Inline::Code(s) => text.push_str(s),
+            Inline::Link { text: lt, .. } => text.push_str(&inlines_to_richtext_str(lt)),
+            Inline::Image { alt, .. } => {
+                text.push_str("[图片: ");
+                text.push_str(alt);
+                text.push(']');
+            }
+            Inline::Html(s) => text.push_str(s),
+            Inline::SoftBreak => text.push(' '),
+            Inline::HardBreak => text.push(' '),
+        }
+    }
+    text
 }
