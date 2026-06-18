@@ -8,6 +8,8 @@ use document_model::ast::{
     TableCell,
 };
 
+use crate::source::SourceHighlighter;
+
 /// 将 `Document` 渲染到 egui UI。
 pub fn render(ui: &mut egui::Ui, doc: &Document) {
     for block in &doc.blocks {
@@ -53,13 +55,35 @@ fn render_paragraph(ui: &mut egui::Ui, p: &Paragraph) {
 }
 
 fn render_code_block(ui: &mut egui::Ui, cb: &CodeBlock) {
-    let mut text = cb.content.clone();
-    ui.add(
-        egui::TextEdit::multiline(&mut text)
-            .code_editor()
-            .interactive(false)
-            .desired_width(f32::INFINITY),
-    );
+    let highlighter = SourceHighlighter::new().ok();
+    if let Some(h) = &highlighter {
+        let lines = h.highlight(&cb.content, cb.language.as_deref());
+        egui::Frame::group(ui.style())
+            .inner_margin(egui::Margin::same(4))
+            .show(ui, |ui| {
+                for line in &lines {
+                    ui.horizontal(|ui| {
+                        for (style, text) in line {
+                            let color = egui::Color32::from_rgb(
+                                style.foreground.r,
+                                style.foreground.g,
+                                style.foreground.b,
+                            );
+                            ui.label(egui::RichText::new(*text).color(color).monospace());
+                        }
+                    });
+                }
+            });
+    } else {
+        // fallback：不高亮
+        let mut text = cb.content.clone();
+        ui.add(
+            egui::TextEdit::multiline(&mut text)
+                .code_editor()
+                .interactive(false)
+                .desired_width(f32::INFINITY),
+        );
+    }
 }
 
 /// 渲染列表。签名传 `&[ListItem]` 引用避免递归 clone（参考阶段 1 serialize.rs 修复）。
@@ -78,7 +102,8 @@ fn render_list(ui: &mut egui::Ui, ordered: bool, start: usize, items: &[ListItem
             if !item.sub_items.is_empty() {
                 ui.indent(egui::Id::new(format!("list_{indent}_{i}")), |ui| {
                     // 递归传 &item.sub_items（非父 List），避免无限递归
-                    render_list(ui, ordered, start, &item.sub_items, indent + 1);
+                    // 子列表序号从 1 开始，不应继承父级 start
+                    render_list(ui, ordered, 1, &item.sub_items, indent + 1);
                 });
             }
         }
@@ -187,7 +212,12 @@ fn inlines_to_plain(inlines: &[Inline]) -> String {
             Inline::Link {
                 text: link_text, ..
             } => text.push_str(&inlines_to_plain(link_text)),
-            Inline::Image { alt, .. } => text.push_str(alt),
+            Inline::Image { alt, .. } => {
+                // 与 inlines_to_richtext 保持一致：UI 占位文本
+                text.push_str("[图片: ");
+                text.push_str(alt);
+                text.push(']');
+            }
             Inline::Html(s) => text.push_str(s),
             Inline::SoftBreak => text.push('\n'),
             Inline::HardBreak => text.push('\n'),
@@ -243,6 +273,6 @@ mod tests {
             url: "https://x.com/x.png".into(),
             title: None,
         }];
-        assert_eq!(inlines_to_plain(&inlines), "alt");
+        assert_eq!(inlines_to_plain(&inlines), "[图片: alt]");
     }
 }
