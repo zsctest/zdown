@@ -10,6 +10,7 @@ pub mod workspace;
 
 pub use dialog::{pick_open_file, pick_save_file};
 pub use error::Error;
+pub use recent::RecentFiles;
 pub use workspace::Workspace;
 
 /// crate 级 Result 别名。

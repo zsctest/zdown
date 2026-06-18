@@ -14,6 +14,7 @@ document_model.workspace = true
 rfd.workspace = true
 dirs.workspace = true
 toml.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

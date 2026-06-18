@@ -4459,6 +4459,7 @@ dependencies = [
  "dirs",
  "document_model",
  "rfd",
+ "serde",
  "tempfile",
  "thiserror 2.0.18",
  "toml",
