@@ -9,7 +9,7 @@
 //! - 文档以单换行结尾
 
 use crate::ast::{
-    Alignment, Block, BlockQuote, CodeBlock, Document, Heading, Inline, List, Paragraph, Table,
+    Alignment, Block, BlockQuote, CodeBlock, Document, Heading, Inline, ListItem, Paragraph, Table,
 };
 
 /// 将 `Document` 序列化为 Markdown 源码。
@@ -32,7 +32,7 @@ fn write_block(out: &mut String, block: &Block) {
         Block::Heading(h) => write_heading(out, h),
         Block::Paragraph(p) => write_paragraph(out, p),
         Block::CodeBlock(cb) => write_code_block(out, cb),
-        Block::List(l) => write_list(out, l, 0),
+        Block::List(l) => write_list(out, l.ordered, l.start, &l.items, 0),
         Block::BlockQuote(bq) => write_blockquote(out, bq),
         Block::ThematicBreak => {
             out.push_str("---\n");
@@ -74,24 +74,21 @@ fn write_code_block(out: &mut String, cb: &CodeBlock) {
     out.push_str("```\n");
 }
 
-fn write_list(out: &mut String, l: &List, indent: usize) {
-    for (i, item) in l.items.iter().enumerate() {
-        let prefix = if l.ordered {
-            format!("{}. ", l.start + i)
+fn write_list(out: &mut String, ordered: bool, start: usize, items: &[ListItem], indent: usize) {
+    for (i, item) in items.iter().enumerate() {
+        let prefix: String = if ordered {
+            format!("{}. ", start + i)
         } else {
             "- ".to_owned()
         };
+        let prefix_len = prefix.len();
         write_indent(out, indent);
         out.push_str(&prefix);
         write_inlines(out, &item.inlines);
         out.push('\n');
         if !item.sub_items.is_empty() {
-            let sub = List {
-                ordered: l.ordered,
-                start: l.start,
-                items: item.sub_items.clone(),
-            };
-            write_list(out, &sub, indent + 2);
+            // 子列表缩进 = 父级 prefix 长度（CommonMark 要求）
+            write_list(out, ordered, start, &item.sub_items, indent + prefix_len);
         }
     }
 }
@@ -212,7 +209,7 @@ fn write_indent(out: &mut String, n: usize) {
 mod tests {
     #![allow(clippy::expect_used)]
     use super::*;
-    use crate::ast::{ListItem, TableCell};
+    use crate::ast::{List, TableCell};
 
     #[test]
     fn empty_doc_to_empty_string() {
@@ -512,5 +509,45 @@ mod tests {
             ],
         };
         assert_eq!(to_markdown(&doc), "a\n\nb\n");
+    }
+
+    #[test]
+    fn nested_ordered_list_indent_follows_prefix_len() {
+        // 有序列表嵌套：子项缩进 = 父级 prefix 长度（3 for "1. "）
+        // 当前实现：子列表继承父级 ordered/start，故子项 marker 也是 "1. "
+        let doc = Document {
+            blocks: vec![Block::List(List {
+                ordered: true,
+                start: 1,
+                items: vec![ListItem {
+                    inlines: vec![Inline::Text("顶".into())],
+                    sub_items: vec![ListItem {
+                        inlines: vec![Inline::Text("嵌".into())],
+                        sub_items: vec![],
+                    }],
+                }],
+            })],
+        };
+        assert_eq!(to_markdown(&doc), "1. 顶\n   1. 嵌\n");
+    }
+
+    #[test]
+    fn nested_ordered_list_start_10_indent_4() {
+        // 父级 start=10 → "10. " 长度 4，子项缩进应为 4
+        // 当前实现：子列表继承父级 ordered/start，故子项 marker 也是 "10. "
+        let doc = Document {
+            blocks: vec![Block::List(List {
+                ordered: true,
+                start: 10,
+                items: vec![ListItem {
+                    inlines: vec![Inline::Text("顶".into())],
+                    sub_items: vec![ListItem {
+                        inlines: vec![Inline::Text("嵌".into())],
+                        sub_items: vec![],
+                    }],
+                }],
+            })],
+        };
+        assert_eq!(to_markdown(&doc), "10. 顶\n    10. 嵌\n");
     }
 }
