@@ -3,6 +3,7 @@
 use eframe::egui;
 
 use crate::editor_state::EditorState;
+use crate::view_mode::ViewMode;
 
 /// 待确认的操作类型（用户选 New/Open/Quit 但有未保存修改时）。
 #[derive(Debug, Clone, PartialEq)]
@@ -27,7 +28,12 @@ impl ConfirmDialog {
 
 /// 渲染菜单栏。
 #[allow(deprecated)]
-pub fn show_menu(ui: &mut egui::Ui, state: &mut EditorState, confirm: &mut ConfirmDialog) {
+pub fn show_menu(
+    ui: &mut egui::Ui,
+    state: &mut EditorState,
+    confirm: &mut ConfirmDialog,
+    view_mode: &mut ViewMode,
+) {
     egui::TopBottomPanel::top("menu").show_inside(ui, |ui| {
         egui::menu::bar(ui, |ui| {
             ui.menu_button("文件", |ui| {
@@ -89,6 +95,19 @@ pub fn show_menu(ui: &mut egui::Ui, state: &mut EditorState, confirm: &mut Confi
                 }
                 if ui.button("重做 (Ctrl+Y)").clicked() {
                     let _ = state.redo();
+                }
+            });
+
+            // 视图菜单
+            ui.menu_button("视图", |ui| {
+                if ui.button("源码 (Ctrl+1)").clicked() {
+                    *view_mode = ViewMode::Source;
+                }
+                if ui.button("预览 (Ctrl+2)").clicked() {
+                    *view_mode = ViewMode::Preview;
+                }
+                if ui.button("Hybrid (Ctrl+3)").clicked() {
+                    *view_mode = ViewMode::Hybrid;
                 }
             });
         });

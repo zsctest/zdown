@@ -1,12 +1,15 @@
-//! zdown-app：egui 应用入口（阶段 1）。
+//! zdown-app：egui 应用入口（阶段 2）。
 
 mod editor_state;
 mod menu;
+mod preview_view;
 mod source_view;
+mod view_mode;
 
 use editor_state::EditorState;
 use eframe::egui;
 use menu::ConfirmDialog;
+use view_mode::ViewMode;
 
 fn main() -> eframe::Result {
     tracing_subscriber::fmt()
@@ -16,7 +19,7 @@ fn main() -> eframe::Result {
         )
         .init();
 
-    tracing::info!("zdown 启动（阶段 1）");
+    tracing::info!("zdown 启动（阶段 2）");
 
     if std::env::var_os("ZDOWN_SMOKE").is_some() {
         tracing::info!("ZDOWN_SMOKE 已设置，跳过 GUI 启动");
@@ -39,18 +42,53 @@ fn main() -> eframe::Result {
 struct ZdownApp {
     state: EditorState,
     confirm: ConfirmDialog,
+    view_mode: ViewMode,
+    /// 缓存上次窗口标题，避免每帧 send_viewport_cmd。
+    last_title: String,
 }
 
 impl eframe::App for ZdownApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        menu::show_menu(ui, &mut self.state, &mut self.confirm);
+        menu::show_menu(ui, &mut self.state, &mut self.confirm, &mut self.view_mode);
         menu::handle_shortcuts(&ctx, &mut self.state, &mut self.confirm);
+
+        // 视图模式快捷键 Ctrl+1/2/3
+        let mods = ctx.input(|i| i.modifiers);
+        if mods.ctrl && !mods.shift {
+            if ctx.input(|i| i.key_pressed(egui::Key::Num1)) {
+                self.view_mode = ViewMode::Source;
+                tracing::info!("切换到源码模式");
+            } else if ctx.input(|i| i.key_pressed(egui::Key::Num2)) {
+                self.view_mode = ViewMode::Preview;
+                tracing::info!("切换到预览模式");
+            } else if ctx.input(|i| i.key_pressed(egui::Key::Num3)) {
+                self.view_mode = ViewMode::Hybrid;
+                tracing::info!("切换到 Hybrid 模式");
+            }
+        }
+
         menu::show_confirm_dialog(&ctx, &mut self.state, &mut self.confirm);
-        source_view::show_source_view(ui, &mut self.state);
+
+        // 根据视图模式渲染
+        match self.view_mode {
+            ViewMode::Source => source_view::show_source_view(ui, &mut self.state),
+            ViewMode::Preview => preview_view::show_preview_view(ui, &mut self.state),
+            ViewMode::Hybrid => {
+                // 阶段 2 占位：Hybrid 暂用 Preview，Plan 4 完整实现
+                preview_view::show_preview_view(ui, &mut self.state);
+            }
+        }
 
         if self.state.should_exit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
+        // 更新窗口标题（只在变化时发送，避免每帧触发窗口管理器）
+        let title = format!("{} [{}]", self.state.title(), self.view_mode.label());
+        if title != self.last_title {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            self.last_title = title;
         }
     }
 }
