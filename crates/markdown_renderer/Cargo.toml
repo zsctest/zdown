@@ -10,3 +10,4 @@ workspace = true
 
 [dependencies]
 thiserror.workspace = true
+syntect = { workspace = true, features = ["default-syntaxes", "default-themes"] }
