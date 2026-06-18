@@ -6,9 +6,9 @@
 //! 3. 查找失败 → 编译期内嵌 Noto Sans CJK SC 子集（fonts/ 下 .ttf）
 //! 4. 全失败 → 返回 Error::FontLoad
 
+use crate::Result;
 use crate::error::Error;
 use crate::theme::{FontConfig, PdfConfig};
-use crate::Result;
 use genpdf::fonts;
 
 /// 一次加载的字体集合，renderer 各处复用。
@@ -66,8 +66,7 @@ fn find_system_font(name: &str) -> Option<Vec<u8>> {
     let handle = source
         .select_best_match(
             &[font_kit::family_name::FamilyName::Title(name.into())],
-            font_kit::properties::Properties::new()
-                .style(font_kit::properties::Style::Normal),
+            font_kit::properties::Properties::new().style(font_kit::properties::Style::Normal),
         )
         .ok()?;
     match handle {

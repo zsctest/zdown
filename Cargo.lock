@@ -5373,6 +5373,7 @@ dependencies = [
  "editor_engine",
  "eframe",
  "egui",
+ "export_engine",
  "markdown_renderer",
  "tempfile",
  "tracing",

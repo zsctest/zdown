@@ -4,13 +4,13 @@
 //! `render_inline_to_paragraph` applies per-inline styling
 //! (emph, strong, code, link, etc.) into a Paragraph.
 
+use genpdf::Element;
 use genpdf::elements::{Break, FrameCellDecorator, LinearLayout, Paragraph, TableLayout};
 use genpdf::style::{Color, Style};
-use genpdf::Element;
 
+use crate::Result;
 use crate::font::FontSet;
 use crate::theme::{PdfConfig, PdfTheme};
-use crate::Result;
 
 use document_model::ast::{
     Block, BlockQuote, CodeBlock, Document, Heading, Inline, ListItem, Paragraph as AstParagraph,
@@ -36,11 +36,7 @@ pub fn render_document(
     Ok(layout)
 }
 
-fn render_block(
-    block: &Block,
-    theme: &PdfTheme,
-    layout: &mut LinearLayout,
-) -> Result<()> {
+fn render_block(block: &Block, theme: &PdfTheme, layout: &mut LinearLayout) -> Result<()> {
     match block {
         Block::Heading(h) => layout.push(render_heading(h, theme)),
         Block::Paragraph(p) => layout.push(render_paragraph(p, theme)),
@@ -110,10 +106,7 @@ fn render_inline_to_paragraph(
         }
         Inline::Code(s) => p.push_styled(s.as_str(), mono_style),
         Inline::Link { text, url, .. } => {
-            p.push_styled(
-                format!("{} ({})", inlines_to_plain(text), url),
-                link_style,
-            );
+            p.push_styled(format!("{} ({})", inlines_to_plain(text), url), link_style);
         }
         Inline::Image { alt, .. } => {
             p.push_styled(format!("[图片: {alt}]"), body_style);
@@ -124,11 +117,7 @@ fn render_inline_to_paragraph(
     }
 }
 
-fn render_code_block(
-    cb: &CodeBlock,
-    theme: &PdfTheme,
-    layout: &mut LinearLayout,
-) {
+fn render_code_block(cb: &CodeBlock, theme: &PdfTheme, layout: &mut LinearLayout) {
     let mut inner = LinearLayout::vertical();
     for line in cb.content.lines() {
         inner.push(
@@ -139,11 +128,7 @@ fn render_code_block(
     layout.push(inner.padded((4, 4, 4, 4)).framed());
 }
 
-fn render_blockquote(
-    bq: &BlockQuote,
-    theme: &PdfTheme,
-    layout: &mut LinearLayout,
-) {
+fn render_blockquote(bq: &BlockQuote, theme: &PdfTheme, layout: &mut LinearLayout) {
     let mut inner = LinearLayout::vertical();
     for block in &bq.blocks {
         let _ = render_block(block, theme, &mut inner);
@@ -187,7 +172,10 @@ fn render_list(
         let indent = theme.spacing.list_indent * (depth as f32);
 
         let mut p = Paragraph::default();
-        p.push_styled(&marker, Style::new().with_font_size(theme.font_size.body as u8));
+        p.push_styled(
+            &marker,
+            Style::new().with_font_size(theme.font_size.body as u8),
+        );
         for inline in &item.inlines {
             render_inline_to_paragraph(&mut p, inline, theme, theme.font_size.body);
         }
@@ -199,11 +187,7 @@ fn render_list(
     }
 }
 
-fn render_table(
-    t: &Table,
-    theme: &PdfTheme,
-    layout: &mut LinearLayout,
-) {
+fn render_table(t: &Table, theme: &PdfTheme, layout: &mut LinearLayout) {
     let ncols = if !t.header.is_empty() {
         t.header.len()
     } else if let Some(row) = t.rows.first() {

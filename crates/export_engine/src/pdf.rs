@@ -2,9 +2,9 @@
 
 use document_model::ast::Document;
 
+use crate::Result;
 use crate::font::FontSet;
 use crate::theme::{Paper, PdfConfig};
-use crate::Result;
 
 use genpdf::Element;
 
@@ -51,8 +51,7 @@ pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
                 .replace("{total}", "1"),
         )
         .styled(
-            genpdf::style::Style::new()
-                .with_font_size(config.theme.font_size.header_footer as u8),
+            genpdf::style::Style::new().with_font_size(config.theme.font_size.header_footer as u8),
         );
         pdf_doc.push(hdr_p);
     }
