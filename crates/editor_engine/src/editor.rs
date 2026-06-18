@@ -40,8 +40,15 @@ impl Editor {
     /// 应用命令。光标移至命令影响末尾，选区清空。
     pub fn apply(&mut self, cmd: Command) -> Result<()> {
         let applied = cmd.apply(&mut self.buffer)?;
-        self.cursor = self.compute_cursor_after(&applied.command)?;
+        let new_cursor = self.compute_cursor_after(&applied.command)?;
+        // 若当前 undo 栈深度 < saved_depth，说明已 undo 到 saved 状态之前，
+        // 新命令会清空 redo 栈，此后无法通过 redo 回到 saved_depth。
+        // 标记 saved_depth 为 MAX 表示永 dirty（只有 mark_saved 才能恢复）。
+        if self.history.len() < self.saved_depth {
+            self.saved_depth = usize::MAX;
+        }
         self.history.push(applied);
+        self.cursor = new_cursor;
         self.selection = None;
         Ok(())
     }
@@ -96,8 +103,8 @@ impl Editor {
                 let end_char = start_char + text.chars().count();
                 self.buffer.char_to_cursor(end_char)
             }
-            Command::Delete { range } => Ok(range.start),
-            Command::Replace { range, .. } => Ok(range.start),
+            Command::Delete { range } => Ok(range.normalized().0),
+            Command::Replace { range, .. } => Ok(range.normalized().0),
         }
     }
 
@@ -261,5 +268,39 @@ mod tests {
         .expect("apply");
         assert_eq!(e.to_string(), "x");
         assert!(e.is_dirty());
+    }
+
+    #[test]
+    fn delete_reversed_selection_cursor_valid() {
+        let mut e = Editor::new("hello world");
+        e.set_selection(Selection::new(Cursor::new(0, 11), Cursor::new(0, 5)))
+            .expect("set_selection");
+        e.apply(Command::Delete {
+            range: e.selection.expect("selection"),
+        })
+        .expect("apply");
+        assert_eq!(e.to_string(), "hello");
+        // cursor 应在 (0,5)（normalized lo），不是 (0,11)
+        assert_eq!(e.cursor, Cursor::new(0, 5));
+    }
+
+    #[test]
+    fn is_dirty_after_undo_then_new_edit() {
+        let mut e = Editor::new("");
+        e.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "a".into(),
+        })
+        .expect("apply");
+        e.mark_saved();
+        assert!(!e.is_dirty());
+        e.undo().expect("undo");
+        assert!(e.is_dirty()); // 偏离 saved "a"（len=0 != saved_depth=1）
+        e.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "b".into(),
+        })
+        .expect("apply");
+        assert!(e.is_dirty()); // 新内容 "b" != saved "a"，应 dirty
     }
 }
