@@ -5,6 +5,15 @@
 //!
 //! pulldown-cmark 0.13 的 `Event::End` 携带 `TagEnd`（仅含类别，不含 url/title 等
 //! 附带数据），因此 Link/Image 的 url/title 必须在 `Start` 时存入专用 frame。
+//!
+//! ## 已知限制（阶段 1）
+//!
+//! - **列表项内子 block 丢失**：list item 内的代码块、子段落、子引用会被静默丢弃
+//!   （AST 的 `ListItem` 不容纳子 block，需在阶段 2 扩展 AST 后修复）
+//! - **Loose list 多段落合并**：loose list 多段落会被合并为单一 inlines 数组，
+//!   段落边界丢失（同根源）
+//! - **嵌套列表类型信息丢失**：有序/无序混合嵌套列表的内层 ordered/start 信息
+//!   不保留（`sub_items: Vec<ListItem>` 不携带 List 元信息）
 
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
@@ -41,6 +50,7 @@ struct BuilderStack {
 }
 
 /// 栈中每一帧对应一个正在构建的容器。
+#[derive(Debug)]
 enum Frame {
     /// 文档根，收集顶层 blocks。
     Root(Vec<Block>),
@@ -100,6 +110,11 @@ impl BuilderStack {
     }
 
     fn finish(mut self) -> Document {
+        debug_assert!(
+            matches!(self.stack.last(), Some(Frame::Root(_))),
+            "解析结束时栈底应为 Root，实际: {:?}",
+            self.stack.last()
+        );
         // 栈底应是 Root，弹出即得顶层 blocks。
         match self.stack.pop() {
             Some(Frame::Root(blocks)) => Document { blocks },
@@ -384,6 +399,7 @@ impl BuilderStack {
     fn push_block(&mut self, block: Block) {
         match self.stack.last_mut() {
             Some(Frame::Root(blocks)) | Some(Frame::BlockQuote(blocks)) => blocks.push(block),
+            // TODO(阶段 2): ListItem AST 扩展后支持子 block。当前 list item 内的代码块/子段落/子引用会被丢弃。
             _ => {}
         }
     }
@@ -671,6 +687,52 @@ mod tests {
                 );
             }
             _ => panic!("期望 Paragraph"),
+        }
+    }
+
+    #[test]
+    #[ignore = "AST 限制：ListItem 不容纳子 block，阶段 2 扩展后启用"]
+    fn parse_list_item_with_code_block() {
+        let src = "- 项\n  ```rust\n  fn x() {}\n  ```\n";
+        let doc = parse(src).expect("解析失败");
+        match &doc.blocks[0] {
+            Block::List(l) => {
+                // 期望：ListItem 含子 block，但当前 AST 不支持
+                // 占位测试，AST 扩展后补充断言
+                assert_eq!(l.items.len(), 1);
+            }
+            _ => panic!("期望 List"),
+        }
+    }
+
+    #[test]
+    #[ignore = "AST 限制：Loose list 多段落合并，阶段 2 扩展后启用"]
+    fn parse_loose_list_multiple_paragraphs() {
+        let src = "- 一段\n\n  二段\n";
+        let doc = parse(src).expect("解析失败");
+        match &doc.blocks[0] {
+            Block::List(l) => {
+                assert_eq!(l.items.len(), 1);
+                // 期望：item 含两个段落，但当前合并为单一 inlines
+                // 占位测试，AST 扩展后补充断言
+            }
+            _ => panic!("期望 List"),
+        }
+    }
+
+    #[test]
+    #[ignore = "AST 限制：嵌套列表类型信息丢失，阶段 2 扩展后启用"]
+    fn parse_mixed_nested_list() {
+        let src = "1. 顶层\n   - 嵌套\n";
+        let doc = parse(src).expect("解析失败");
+        match &doc.blocks[0] {
+            Block::List(l) => {
+                assert!(l.ordered);
+                assert_eq!(l.items.len(), 1);
+                // 期望：sub_items 保留内层 ordered=false 信息，但当前丢失
+                // 占位测试，AST 扩展后补充断言
+            }
+            _ => panic!("期望 List"),
         }
     }
 }
