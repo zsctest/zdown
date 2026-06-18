@@ -1,15 +1,29 @@
 //! Markdown AST 节点类型。
 //!
 //! 分 Block / Inline 两层。节点用 struct，便于后续扩展字段。
-//! 不携带 source span（阶段 2 hybrid 模式需要时再加）。
 
 use serde::{Deserialize, Serialize};
+
+/// 源码 span（行范围，0-based，含两端）。
+/// 用于 hybrid 模式按 block 边界分割。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Span {
+    pub start_line: usize,
+    pub end_line: usize,
+}
+
+/// 带 span 的 Block。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BlockWithSpan {
+    pub block: Block,
+    pub span: Span,
+}
 
 /// 文档根类型。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Document {
-    /// 顶层块级节点，按文档顺序排列。
-    pub blocks: Vec<Block>,
+    /// 顶层块级节点（带 span），按文档顺序排列。
+    pub blocks: Vec<BlockWithSpan>,
 }
 
 /// 块级节点。
@@ -70,8 +84,8 @@ pub struct ListItem {
 /// 引用块。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlockQuote {
-    /// 引用内的块级节点。
-    pub blocks: Vec<Block>,
+    /// 引用内的块级节点（带 span）。
+    pub blocks: Vec<BlockWithSpan>,
 }
 
 /// 表格。
@@ -138,6 +152,17 @@ mod tests {
     fn document_default_is_empty() {
         let doc = Document { blocks: vec![] };
         assert!(doc.blocks.is_empty());
+    }
+
+    #[test]
+    fn span_serializes_to_json() {
+        let span = Span {
+            start_line: 0,
+            end_line: 1,
+        };
+        let json = serde_json::to_string(&span).expect("serialize Span");
+        assert!(json.contains("\"start_line\":0"));
+        assert!(json.contains("\"end_line\":1"));
     }
 
     #[test]

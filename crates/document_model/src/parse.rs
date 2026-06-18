@@ -20,8 +20,8 @@ use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, T
 use crate::{
     Result,
     ast::{
-        Alignment, Block, BlockQuote, CodeBlock, Document, Heading, Inline, List, ListItem,
-        Paragraph, Table, TableCell,
+        Alignment, Block, BlockQuote, BlockWithSpan, CodeBlock, Document, Heading, Inline, List,
+        ListItem, Paragraph, Span, Table, TableCell,
     },
 };
 
@@ -47,31 +47,45 @@ pub fn parse(src: &str) -> Result<Document> {
 struct BuilderStack {
     /// 从根到当前最深层的 builder 链。栈底是根（收集顶层 blocks）。
     stack: Vec<Frame>,
+    /// 当前行号（0-based）。
+    current_line: usize,
 }
 
 /// 栈中每一帧对应一个正在构建的容器。
 #[derive(Debug)]
 enum Frame {
     /// 文档根，收集顶层 blocks。
-    Root(Vec<Block>),
+    Root(Vec<BlockWithSpan>),
     /// 段落，收集 inlines。
-    Paragraph(Vec<Inline>),
+    Paragraph {
+        inlines: Vec<Inline>,
+        start_line: usize,
+    },
     /// 标题，收集 inlines（level 已知）。
-    Heading { level: u8, inlines: Vec<Inline> },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+        start_line: usize,
+    },
     /// 代码块（语言已知，content 累积中）。
     CodeBlock {
         language: Option<String>,
         content: String,
+        start_line: usize,
     },
     /// 块级 HTML，累积原始 HTML 文本。
-    HtmlBlock(String),
+    HtmlBlock { content: String, start_line: usize },
     /// 引用块，收集内部 blocks。
-    BlockQuote(Vec<Block>),
+    BlockQuote {
+        blocks: Vec<BlockWithSpan>,
+        start_line: usize,
+    },
     /// 列表（ordered / start 已知，items 累积中）。
     List {
         ordered: bool,
         start: usize,
         items: Vec<ListItem>,
+        start_line: usize,
     },
     /// 列表项，inlines 累积中，sub_items 在嵌套时填充。
     ListItem {
@@ -83,6 +97,7 @@ enum Frame {
         header: Vec<TableCell>,
         rows: Vec<Vec<TableCell>>,
         alignments: Vec<Option<Alignment>>,
+        start_line: usize,
     },
     /// 表格行（累积中），cells 收集后并入 Table。
     TableRow(Vec<TableCell>),
@@ -106,6 +121,7 @@ impl BuilderStack {
     fn new() -> Self {
         Self {
             stack: vec![Frame::Root(vec![])],
+            current_line: 0,
         }
     }
 
@@ -126,13 +142,30 @@ impl BuilderStack {
         match event {
             Event::Start(tag) => self.start_tag(tag),
             Event::End(tag) => self.end_tag(tag),
-            Event::Text(s) => self.push_inline(Inline::Text(s.into_string())),
+            Event::Text(s) => {
+                let s = s.into_string();
+                let newlines = s.chars().filter(|&c| c == '\n').count();
+                self.current_line += newlines;
+                self.push_inline(Inline::Text(s));
+            }
             Event::Code(s) => self.push_inline(Inline::Code(s.into_string())),
             Event::Html(s) => self.push_html(s.into_string()),
             Event::InlineHtml(s) => self.push_inline(Inline::Html(s.into_string())),
-            Event::SoftBreak => self.push_inline(Inline::SoftBreak),
-            Event::HardBreak => self.push_inline(Inline::HardBreak),
-            Event::Rule => self.push_block(Block::ThematicBreak),
+            Event::SoftBreak => {
+                self.current_line += 1;
+                self.push_inline(Inline::SoftBreak);
+            }
+            Event::HardBreak => {
+                self.current_line += 1;
+                self.push_inline(Inline::HardBreak);
+            }
+            Event::Rule => {
+                let span = Span {
+                    start_line: self.current_line,
+                    end_line: self.current_line,
+                };
+                self.push_block_with_span(Block::ThematicBreak, span);
+            }
             Event::FootnoteReference(_) | Event::TaskListMarker(_) => {
                 // 阶段 1 不支持脚注与任务列表，忽略。
             }
@@ -144,12 +177,16 @@ impl BuilderStack {
 
     fn start_tag(&mut self, tag: Tag) {
         match tag {
-            Tag::Paragraph => self.stack.push(Frame::Paragraph(vec![])),
+            Tag::Paragraph => self.stack.push(Frame::Paragraph {
+                inlines: vec![],
+                start_line: self.current_line,
+            }),
             Tag::Heading { level, .. } => {
                 let lvl = heading_level_to_u8(level);
                 self.stack.push(Frame::Heading {
                     level: lvl,
                     inlines: vec![],
+                    start_line: self.current_line,
                 });
             }
             Tag::CodeBlock(kind) => {
@@ -163,10 +200,17 @@ impl BuilderStack {
                 self.stack.push(Frame::CodeBlock {
                     language,
                     content: String::new(),
+                    start_line: self.current_line,
                 });
             }
-            Tag::HtmlBlock => self.stack.push(Frame::HtmlBlock(String::new())),
-            Tag::BlockQuote(_) => self.stack.push(Frame::BlockQuote(vec![])),
+            Tag::HtmlBlock => self.stack.push(Frame::HtmlBlock {
+                content: String::new(),
+                start_line: self.current_line,
+            }),
+            Tag::BlockQuote(_) => self.stack.push(Frame::BlockQuote {
+                blocks: vec![],
+                start_line: self.current_line,
+            }),
             Tag::List(start) => {
                 let (ordered, start_num) = match start {
                     Some(n) => (true, n as usize),
@@ -176,6 +220,7 @@ impl BuilderStack {
                     ordered,
                     start: start_num,
                     items: vec![],
+                    start_line: self.current_line,
                 });
             }
             Tag::Item => self.stack.push(Frame::ListItem {
@@ -188,6 +233,7 @@ impl BuilderStack {
                     header: vec![],
                     rows: vec![],
                     alignments: aligns,
+                    start_line: self.current_line,
                 });
             }
             Tag::TableHead => self.stack.push(Frame::TableRow(vec![])),
@@ -196,11 +242,17 @@ impl BuilderStack {
             // Emph/Strong/Strikethrough 用临时 Paragraph frame 收集内部 inlines，
             // End 时转换为对应 inline。
             Tag::Emphasis | Tag::Strong | Tag::Strikethrough => {
-                self.stack.push(Frame::Paragraph(vec![]));
+                self.stack.push(Frame::Paragraph {
+                    inlines: vec![],
+                    start_line: self.current_line,
+                });
             }
             // Superscript/Subscript 阶段 1 不保留语义，用临时 frame 收集后丢弃。
             Tag::Superscript | Tag::Subscript => {
-                self.stack.push(Frame::Paragraph(vec![]));
+                self.stack.push(Frame::Paragraph {
+                    inlines: vec![],
+                    start_line: self.current_line,
+                });
             }
             Tag::Link {
                 dest_url, title, ..
@@ -232,8 +284,16 @@ impl BuilderStack {
     fn end_tag(&mut self, tag: TagEnd) {
         match tag {
             TagEnd::Paragraph => {
-                if let Some(Frame::Paragraph(inlines)) = self.stack.pop() {
+                if let Some(Frame::Paragraph {
+                    inlines,
+                    start_line,
+                }) = self.stack.pop()
+                {
                     let p = Paragraph { inlines };
+                    let span = Span {
+                        start_line,
+                        end_line: self.current_line,
+                    };
                     // 列表项内的段落（loose list）扁平化为 item inlines。
                     match self.stack.last_mut() {
                         Some(Frame::ListItem {
@@ -242,31 +302,61 @@ impl BuilderStack {
                         }) => {
                             item_inlines.extend(p.inlines);
                         }
-                        _ => self.push_block(Block::Paragraph(p)),
+                        _ => self.push_block_with_span(Block::Paragraph(p), span),
                     }
                 }
             }
             TagEnd::Heading(_) => {
-                if let Some(Frame::Heading { level, inlines }) = self.stack.pop() {
+                if let Some(Frame::Heading {
+                    level,
+                    inlines,
+                    start_line,
+                }) = self.stack.pop()
+                {
                     let h = Heading { level, inlines };
-                    self.push_block(Block::Heading(h));
+                    let span = Span {
+                        start_line,
+                        end_line: self.current_line,
+                    };
+                    self.push_block_with_span(Block::Heading(h), span);
                 }
             }
             TagEnd::CodeBlock => {
-                if let Some(Frame::CodeBlock { language, content }) = self.stack.pop() {
+                if let Some(Frame::CodeBlock {
+                    language,
+                    content,
+                    start_line,
+                }) = self.stack.pop()
+                {
                     let cb = CodeBlock { language, content };
-                    self.push_block(Block::CodeBlock(cb));
+                    let span = Span {
+                        start_line,
+                        end_line: self.current_line,
+                    };
+                    self.push_block_with_span(Block::CodeBlock(cb), span);
                 }
             }
             TagEnd::HtmlBlock => {
-                if let Some(Frame::HtmlBlock(content)) = self.stack.pop() {
-                    self.push_block(Block::HtmlBlock(content));
+                if let Some(Frame::HtmlBlock {
+                    content,
+                    start_line,
+                }) = self.stack.pop()
+                {
+                    let span = Span {
+                        start_line,
+                        end_line: self.current_line,
+                    };
+                    self.push_block_with_span(Block::HtmlBlock(content), span);
                 }
             }
             TagEnd::BlockQuote(_) => {
-                if let Some(Frame::BlockQuote(blocks)) = self.stack.pop() {
+                if let Some(Frame::BlockQuote { blocks, start_line }) = self.stack.pop() {
                     let bq = BlockQuote { blocks };
-                    self.push_block(Block::BlockQuote(bq));
+                    let span = Span {
+                        start_line,
+                        end_line: self.current_line,
+                    };
+                    self.push_block_with_span(Block::BlockQuote(bq), span);
                 }
             }
             TagEnd::List(_) => {
@@ -274,6 +364,7 @@ impl BuilderStack {
                     ordered,
                     start,
                     items,
+                    start_line,
                 }) = self.stack.pop()
                 {
                     // 嵌套列表（父为 ListItem）：items 直接并入父 item 的 sub_items
@@ -286,7 +377,11 @@ impl BuilderStack {
                                 start,
                                 items,
                             };
-                            self.push_block(Block::List(l));
+                            let span = Span {
+                                start_line,
+                                end_line: self.current_line,
+                            };
+                            self.push_block_with_span(Block::List(l), span);
                         }
                     }
                 }
@@ -306,6 +401,7 @@ impl BuilderStack {
                     header,
                     rows,
                     alignments,
+                    start_line,
                 }) = self.stack.pop()
                 {
                     let t = Table {
@@ -313,7 +409,11 @@ impl BuilderStack {
                         rows,
                         alignments,
                     };
-                    self.push_block(Block::Table(t));
+                    let span = Span {
+                        start_line,
+                        end_line: self.current_line,
+                    };
+                    self.push_block_with_span(Block::Table(t), span);
                 }
             }
             TagEnd::TableHead => {
@@ -339,17 +439,17 @@ impl BuilderStack {
                 }
             }
             TagEnd::Emphasis => {
-                if let Some(Frame::Paragraph(inlines)) = self.stack.pop() {
+                if let Some(Frame::Paragraph { inlines, .. }) = self.stack.pop() {
                     self.push_inline(Inline::Emph(inlines));
                 }
             }
             TagEnd::Strong => {
-                if let Some(Frame::Paragraph(inlines)) = self.stack.pop() {
+                if let Some(Frame::Paragraph { inlines, .. }) = self.stack.pop() {
                     self.push_inline(Inline::Strong(inlines));
                 }
             }
             TagEnd::Strikethrough => {
-                if let Some(Frame::Paragraph(inlines)) = self.stack.pop() {
+                if let Some(Frame::Paragraph { inlines, .. }) = self.stack.pop() {
                     // Inline 不含 Strikethrough 变体，阶段 1 退化为 Text（保留文本，丢失语义）。
                     let s = inlines_into_text(inlines);
                     self.push_inline(Inline::Text(s));
@@ -382,7 +482,7 @@ impl BuilderStack {
             }
             TagEnd::Superscript | TagEnd::Subscript => {
                 // 弹出临时 Paragraph frame，丢弃内容（阶段 1 不保留语义）。
-                if matches!(self.stack.last(), Some(Frame::Paragraph(_))) {
+                if matches!(self.stack.last(), Some(Frame::Paragraph { .. })) {
                     self.stack.pop();
                 }
             }
@@ -396,9 +496,11 @@ impl BuilderStack {
     }
 
     /// 将 block 推入最近的能容纳 block 的父 frame（Root 或 BlockQuote）。
-    fn push_block(&mut self, block: Block) {
+    fn push_block_with_span(&mut self, block: Block, span: Span) {
         match self.stack.last_mut() {
-            Some(Frame::Root(blocks)) | Some(Frame::BlockQuote(blocks)) => blocks.push(block),
+            Some(Frame::Root(blocks)) | Some(Frame::BlockQuote { blocks, .. }) => {
+                blocks.push(BlockWithSpan { block, span });
+            }
             // TODO(阶段 2): ListItem AST 扩展后支持子 block。当前 list item 内的代码块/子段落/子引用会被丢弃。
             _ => {}
         }
@@ -407,7 +509,7 @@ impl BuilderStack {
     /// 将 inline 推入最近的能容纳 inline 的父 frame。
     fn push_inline(&mut self, inline: Inline) {
         match self.stack.last_mut() {
-            Some(Frame::Paragraph(inlines))
+            Some(Frame::Paragraph { inlines, .. })
             | Some(Frame::Heading { inlines, .. })
             | Some(Frame::TableCell(inlines))
             | Some(Frame::Link { inlines, .. })
@@ -418,7 +520,7 @@ impl BuilderStack {
                     content.push_str(&s);
                 }
             }
-            Some(Frame::HtmlBlock(content)) => {
+            Some(Frame::HtmlBlock { content, .. }) => {
                 if let Inline::Text(s) = inline {
                     content.push_str(&s);
                 }
@@ -431,7 +533,7 @@ impl BuilderStack {
     /// HTML 事件：在 HtmlBlock frame 内累积为块内容；否则作为行内 HTML。
     fn push_html(&mut self, s: String) {
         match self.stack.last_mut() {
-            Some(Frame::HtmlBlock(content)) => content.push_str(&s),
+            Some(Frame::HtmlBlock { content, .. }) => content.push_str(&s),
             _ => self.push_inline(Inline::Html(s)),
         }
     }
@@ -492,7 +594,10 @@ mod tests {
         let doc = parse("# 标题").expect("解析标题失败");
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
-            Block::Heading(h) => {
+            BlockWithSpan {
+                block: Block::Heading(h),
+                ..
+            } => {
                 assert_eq!(h.level, 1);
                 assert_eq!(h.inlines, vec![Inline::Text("标题".into())]);
             }
@@ -504,7 +609,10 @@ mod tests {
     fn parse_heading_level_3() {
         let doc = parse("### 三级").expect("解析失败");
         match &doc.blocks[0] {
-            Block::Heading(h) => assert_eq!(h.level, 3),
+            BlockWithSpan {
+                block: Block::Heading(h),
+                ..
+            } => assert_eq!(h.level, 3),
             _ => panic!("期望 Heading"),
         }
     }
@@ -513,7 +621,10 @@ mod tests {
     fn parse_paragraph() {
         let doc = parse("hello world").expect("解析失败");
         match &doc.blocks[0] {
-            Block::Paragraph(p) => {
+            BlockWithSpan {
+                block: Block::Paragraph(p),
+                ..
+            } => {
                 assert_eq!(p.inlines, vec![Inline::Text("hello world".into())]);
             }
             _ => panic!("期望 Paragraph"),
@@ -525,7 +636,10 @@ mod tests {
         let src = "```rust\nfn main() {}\n```\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::CodeBlock(cb) => {
+            BlockWithSpan {
+                block: Block::CodeBlock(cb),
+                ..
+            } => {
                 assert_eq!(cb.language.as_deref(), Some("rust"));
                 assert_eq!(cb.content, "fn main() {}\n");
             }
@@ -538,7 +652,10 @@ mod tests {
         let src = "- 一\n- 二\n- 三\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::List(l) => {
+            BlockWithSpan {
+                block: Block::List(l),
+                ..
+            } => {
                 assert!(!l.ordered);
                 assert_eq!(l.items.len(), 3);
                 assert_eq!(l.items[0].inlines, vec![Inline::Text("一".into())]);
@@ -553,7 +670,10 @@ mod tests {
         let src = "- 顶层\n  - 嵌套\n- 顶层2\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::List(l) => {
+            BlockWithSpan {
+                block: Block::List(l),
+                ..
+            } => {
                 assert_eq!(l.items.len(), 2);
                 assert_eq!(l.items[0].sub_items.len(), 1);
                 assert_eq!(
@@ -570,10 +690,16 @@ mod tests {
         let src = "> 引用文本\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::BlockQuote(bq) => {
+            BlockWithSpan {
+                block: Block::BlockQuote(bq),
+                ..
+            } => {
                 assert_eq!(bq.blocks.len(), 1);
                 match &bq.blocks[0] {
-                    Block::Paragraph(p) => {
+                    BlockWithSpan {
+                        block: Block::Paragraph(p),
+                        ..
+                    } => {
                         assert_eq!(p.inlines, vec![Inline::Text("引用文本".into())]);
                     }
                     _ => panic!("引用内期望 Paragraph"),
@@ -588,7 +714,13 @@ mod tests {
         for src in ["---\n", "***\n", "___\n"] {
             let doc = parse(src).expect("解析失败");
             assert!(
-                matches!(&doc.blocks[0], Block::ThematicBreak),
+                matches!(
+                    &doc.blocks[0],
+                    BlockWithSpan {
+                        block: Block::ThematicBreak,
+                        ..
+                    }
+                ),
                 "期望 ThematicBreak，src={src}"
             );
         }
@@ -599,7 +731,10 @@ mod tests {
         let src = "*emph* **strong**\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::Paragraph(p) => {
+            BlockWithSpan {
+                block: Block::Paragraph(p),
+                ..
+            } => {
                 assert!(
                     p.inlines
                         .contains(&Inline::Emph(vec![Inline::Text("emph".into())]))
@@ -617,7 +752,10 @@ mod tests {
     fn parse_inline_code() {
         let doc = parse("`code`").expect("解析失败");
         match &doc.blocks[0] {
-            Block::Paragraph(p) => {
+            BlockWithSpan {
+                block: Block::Paragraph(p),
+                ..
+            } => {
                 assert!(p.inlines.contains(&Inline::Code("code".into())));
             }
             _ => panic!("期望 Paragraph"),
@@ -629,7 +767,10 @@ mod tests {
         let src = "[text](https://example.com)\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::Paragraph(p) => {
+            BlockWithSpan {
+                block: Block::Paragraph(p),
+                ..
+            } => {
                 let found = p.inlines.iter().any(|i| {
                     matches!(
                         i,
@@ -647,7 +788,10 @@ mod tests {
         let src = "![alt](https://example.com/x.png)\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::Paragraph(p) => {
+            BlockWithSpan {
+                block: Block::Paragraph(p),
+                ..
+            } => {
                 let found = p.inlines.iter().any(|i| {
                     matches!(
                         i,
@@ -665,7 +809,10 @@ mod tests {
         let src = "| a | b |\n|---|---|\n| 1 | 2 |\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::Table(t) => {
+            BlockWithSpan {
+                block: Block::Table(t),
+                ..
+            } => {
                 assert_eq!(t.header.len(), 2);
                 assert_eq!(t.rows.len(), 1);
                 assert_eq!(t.rows[0].len(), 2);
@@ -679,7 +826,10 @@ mod tests {
         let src = "line1\nline2\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::Paragraph(p) => {
+            BlockWithSpan {
+                block: Block::Paragraph(p),
+                ..
+            } => {
                 assert!(
                     p.inlines.contains(&Inline::SoftBreak),
                     "未找到 SoftBreak: {:?}",
@@ -696,7 +846,10 @@ mod tests {
         let src = "- 项\n  ```rust\n  fn x() {}\n  ```\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::List(l) => {
+            BlockWithSpan {
+                block: Block::List(l),
+                ..
+            } => {
                 // 期望：ListItem 含子 block，但当前 AST 不支持
                 // 占位测试，AST 扩展后补充断言
                 assert_eq!(l.items.len(), 1);
@@ -711,7 +864,10 @@ mod tests {
         let src = "- 一段\n\n  二段\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::List(l) => {
+            BlockWithSpan {
+                block: Block::List(l),
+                ..
+            } => {
                 assert_eq!(l.items.len(), 1);
                 // 期望：item 含两个段落，但当前合并为单一 inlines
                 // 占位测试，AST 扩展后补充断言
@@ -726,7 +882,10 @@ mod tests {
         let src = "1. 顶层\n   - 嵌套\n";
         let doc = parse(src).expect("解析失败");
         match &doc.blocks[0] {
-            Block::List(l) => {
+            BlockWithSpan {
+                block: Block::List(l),
+                ..
+            } => {
                 assert!(l.ordered);
                 assert_eq!(l.items.len(), 1);
                 // 期望：sub_items 保留内层 ordered=false 信息，但当前丢失

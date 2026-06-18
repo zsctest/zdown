@@ -9,16 +9,26 @@ use workspace::{RecentFiles, Workspace};
 use document_model::Document;
 use document_model::ast::*;
 
+fn bws(block: Block) -> BlockWithSpan {
+    BlockWithSpan {
+        block,
+        span: Span {
+            start_line: 0,
+            end_line: 0,
+        },
+    }
+}
+
 fn sample_doc() -> Document {
     Document {
         blocks: vec![
-            Block::Heading(Heading {
+            bws(Block::Heading(Heading {
                 level: 1,
                 inlines: vec![Inline::Text("标题".into())],
-            }),
-            Block::Paragraph(Paragraph {
+            })),
+            bws(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Text("内容".into())],
-            }),
+            })),
         ],
     }
 }
@@ -106,9 +116,9 @@ fn save_after_open_persists_changes() {
 
     // 修改后保存
     let doc2 = Document {
-        blocks: vec![Block::Paragraph(Paragraph {
+        blocks: vec![bws(Block::Paragraph(Paragraph {
             inlines: vec![Inline::Text("modified".into())],
-        })],
+        }))],
     };
     ws.save(&doc2).expect("save again");
 

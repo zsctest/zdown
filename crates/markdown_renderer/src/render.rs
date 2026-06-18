@@ -12,8 +12,8 @@ use crate::source::SourceHighlighter;
 
 /// 将 `Document` 渲染到 egui UI。
 pub fn render(ui: &mut egui::Ui, doc: &Document) {
-    for block in &doc.blocks {
-        render_block(ui, block);
+    for bws in &doc.blocks {
+        render_block(ui, &bws.block);
     }
 }
 
@@ -152,14 +152,12 @@ fn render_list(ui: &mut egui::Ui, ordered: bool, start: usize, items: &[ListItem
 }
 
 fn render_blockquote(ui: &mut egui::Ui, bq: &BlockQuote) {
-    // 注意：egui 0.34 的 Frame::group 签名可能是 Frame::group(style) 或 Frame::group(ui)。
-    // 若编译失败，按错误调整。
     egui::Frame::group(ui.style())
         .stroke(egui::Stroke::new(2.0, egui::Color32::LIGHT_BLUE))
         .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
-            for block in &bq.blocks {
-                render_block(ui, block);
+            for bws in &bq.blocks {
+                render_block(ui, &bws.block);
             }
         });
 }

@@ -58,15 +58,25 @@ impl Default for Workspace {
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
-    use document_model::ast::*;
+    use document_model::ast::{Block, BlockWithSpan, Document, Inline, Paragraph, Span};
+
+    fn bws(block: Block) -> BlockWithSpan {
+        BlockWithSpan {
+            block,
+            span: Span {
+                start_line: 0,
+                end_line: 0,
+            },
+        }
+    }
     use std::io::Write;
     use tempfile::NamedTempFile;
 
     fn sample_doc() -> Document {
         Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Text("hello".into())],
-            })],
+            }))],
         }
     }
 
@@ -90,7 +100,13 @@ mod tests {
         let doc = ws.open(&path).expect("open");
         assert_eq!(ws.current_path(), Some(path.as_path()));
         assert_eq!(doc.blocks.len(), 1);
-        assert!(matches!(&doc.blocks[0], Block::Heading(_)));
+        assert!(matches!(
+            &doc.blocks[0],
+            BlockWithSpan {
+                block: Block::Heading(_),
+                ..
+            }
+        ));
     }
 
     #[test]

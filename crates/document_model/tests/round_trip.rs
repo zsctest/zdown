@@ -132,7 +132,7 @@ fn round_trip_empty() {
     assert_eq!(out, "");
 }
 
-/// 反向：构造 AST → to_markdown → parse 应得等价 AST。
+/// 反向：构造 AST → to_markdown → parse 应得等价 AST（忽略 span）。
 #[test]
 fn ast_to_markdown_back_to_ast() {
     use document_model::ast::*;
@@ -140,16 +140,31 @@ fn ast_to_markdown_back_to_ast() {
 
     let original = Document {
         blocks: vec![
-            Block::Heading(Heading {
-                level: 1,
-                inlines: vec![Inline::Text("标题".into())],
-            }),
-            Block::Paragraph(Paragraph {
-                inlines: vec![Inline::Text("内容".into())],
-            }),
+            BlockWithSpan {
+                block: Block::Heading(Heading {
+                    level: 1,
+                    inlines: vec![Inline::Text("标题".into())],
+                }),
+                span: Span {
+                    start_line: 0,
+                    end_line: 0,
+                },
+            },
+            BlockWithSpan {
+                block: Block::Paragraph(Paragraph {
+                    inlines: vec![Inline::Text("内容".into())],
+                }),
+                span: Span {
+                    start_line: 0,
+                    end_line: 0,
+                },
+            },
         ],
     };
     let md = to_markdown(&original);
     let reparsed = parse(&md).expect("重新解析失败");
-    assert_eq!(reparsed, original);
+    // 比较 block 内容（忽略 span，手工构造的 span 与 parse 填充的不同）
+    let original_blocks: Vec<_> = original.blocks.into_iter().map(|bws| bws.block).collect();
+    let reparsed_blocks: Vec<_> = reparsed.blocks.into_iter().map(|bws| bws.block).collect();
+    assert_eq!(reparsed_blocks, original_blocks);
 }

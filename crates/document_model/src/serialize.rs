@@ -15,11 +15,11 @@ use crate::ast::{
 /// 将 `Document` 序列化为 Markdown 源码。
 pub fn to_markdown(doc: &Document) -> String {
     let mut out = String::new();
-    for (i, block) in doc.blocks.iter().enumerate() {
+    for (i, bws) in doc.blocks.iter().enumerate() {
         if i > 0 {
             out.push('\n');
         }
-        write_block(&mut out, block);
+        write_block(&mut out, &bws.block);
     }
     if !out.is_empty() && !out.ends_with('\n') {
         out.push('\n');
@@ -95,11 +95,11 @@ fn write_list(out: &mut String, ordered: bool, start: usize, items: &[ListItem],
 
 fn write_blockquote(out: &mut String, bq: &BlockQuote) {
     let mut inner = String::new();
-    for (i, block) in bq.blocks.iter().enumerate() {
+    for (i, bws) in bq.blocks.iter().enumerate() {
         if i > 0 {
             inner.push('\n');
         }
-        write_block(&mut inner, block);
+        write_block(&mut inner, &bws.block);
     }
     for line in inner.lines() {
         if line.is_empty() {
@@ -213,7 +213,17 @@ fn write_indent(out: &mut String, n: usize) {
 mod tests {
     #![allow(clippy::expect_used)]
     use super::*;
-    use crate::ast::{List, TableCell};
+    use crate::ast::{BlockWithSpan, List, Span, TableCell};
+
+    fn bws(block: Block) -> BlockWithSpan {
+        BlockWithSpan {
+            block,
+            span: Span {
+                start_line: 0,
+                end_line: 0,
+            },
+        }
+    }
 
     #[test]
     fn empty_doc_to_empty_string() {
@@ -224,10 +234,10 @@ mod tests {
     #[test]
     fn heading_h1() {
         let doc = Document {
-            blocks: vec![Block::Heading(Heading {
+            blocks: vec![bws(Block::Heading(Heading {
                 level: 1,
                 inlines: vec![Inline::Text("标题".into())],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "# 标题\n");
     }
@@ -235,10 +245,10 @@ mod tests {
     #[test]
     fn heading_h3() {
         let doc = Document {
-            blocks: vec![Block::Heading(Heading {
+            blocks: vec![bws(Block::Heading(Heading {
                 level: 3,
                 inlines: vec![Inline::Text("三".into())],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "### 三\n");
     }
@@ -246,9 +256,9 @@ mod tests {
     #[test]
     fn paragraph() {
         let doc = Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Text("hello".into())],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "hello\n");
     }
@@ -256,10 +266,10 @@ mod tests {
     #[test]
     fn code_block_with_lang() {
         let doc = Document {
-            blocks: vec![Block::CodeBlock(CodeBlock {
+            blocks: vec![bws(Block::CodeBlock(CodeBlock {
                 language: Some("rust".into()),
                 content: "fn x() {}\n".into(),
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "```rust\nfn x() {}\n```\n");
     }
@@ -267,10 +277,10 @@ mod tests {
     #[test]
     fn code_block_no_lang() {
         let doc = Document {
-            blocks: vec![Block::CodeBlock(CodeBlock {
+            blocks: vec![bws(Block::CodeBlock(CodeBlock {
                 language: None,
                 content: "plain\n".into(),
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "```\nplain\n```\n");
     }
@@ -278,7 +288,7 @@ mod tests {
     #[test]
     fn unordered_list() {
         let doc = Document {
-            blocks: vec![Block::List(List {
+            blocks: vec![bws(Block::List(List {
                 ordered: false,
                 start: 0,
                 items: vec![
@@ -291,7 +301,7 @@ mod tests {
                         sub_items: vec![],
                     },
                 ],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "- a\n- b\n");
     }
@@ -299,7 +309,7 @@ mod tests {
     #[test]
     fn ordered_list_start_1() {
         let doc = Document {
-            blocks: vec![Block::List(List {
+            blocks: vec![bws(Block::List(List {
                 ordered: true,
                 start: 1,
                 items: vec![
@@ -312,7 +322,7 @@ mod tests {
                         sub_items: vec![],
                     },
                 ],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "1. 一\n2. 二\n");
     }
@@ -320,7 +330,7 @@ mod tests {
     #[test]
     fn nested_list() {
         let doc = Document {
-            blocks: vec![Block::List(List {
+            blocks: vec![bws(Block::List(List {
                 ordered: false,
                 start: 0,
                 items: vec![ListItem {
@@ -330,7 +340,7 @@ mod tests {
                         sub_items: vec![],
                     }],
                 }],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "- 顶\n  - 嵌\n");
     }
@@ -338,11 +348,11 @@ mod tests {
     #[test]
     fn blockquote() {
         let doc = Document {
-            blocks: vec![Block::BlockQuote(BlockQuote {
-                blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::BlockQuote(BlockQuote {
+                blocks: vec![bws(Block::Paragraph(Paragraph {
                     inlines: vec![Inline::Text("引用".into())],
-                })],
-            })],
+                }))],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "> 引用\n");
     }
@@ -350,7 +360,7 @@ mod tests {
     #[test]
     fn thematic_break() {
         let doc = Document {
-            blocks: vec![Block::ThematicBreak],
+            blocks: vec![bws(Block::ThematicBreak)],
         };
         assert_eq!(to_markdown(&doc), "---\n");
     }
@@ -358,9 +368,9 @@ mod tests {
     #[test]
     fn emph() {
         let doc = Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Emph(vec![Inline::Text("e".into())])],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "*e*\n");
     }
@@ -368,9 +378,9 @@ mod tests {
     #[test]
     fn strong() {
         let doc = Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Strong(vec![Inline::Text("s".into())])],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "**s**\n");
     }
@@ -378,9 +388,9 @@ mod tests {
     #[test]
     fn inline_code() {
         let doc = Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Code("c".into())],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "`c`\n");
     }
@@ -388,13 +398,13 @@ mod tests {
     #[test]
     fn link() {
         let doc = Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Link {
                     text: vec![Inline::Text("t".into())],
                     url: "https://x.com".into(),
                     title: None,
                 }],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "[t](https://x.com)\n");
     }
@@ -402,13 +412,13 @@ mod tests {
     #[test]
     fn link_with_title() {
         let doc = Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Link {
                     text: vec![Inline::Text("t".into())],
                     url: "https://x.com".into(),
                     title: Some("T".into()),
                 }],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "[t](https://x.com \"T\")\n");
     }
@@ -416,13 +426,13 @@ mod tests {
     #[test]
     fn image() {
         let doc = Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Image {
                     alt: "a".into(),
                     url: "https://x.com/y.png".into(),
                     title: None,
                 }],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "![a](https://x.com/y.png)\n");
     }
@@ -430,13 +440,13 @@ mod tests {
     #[test]
     fn soft_break() {
         let doc = Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![
                     Inline::Text("a".into()),
                     Inline::SoftBreak,
                     Inline::Text("b".into()),
                 ],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "a\nb\n");
     }
@@ -444,13 +454,13 @@ mod tests {
     #[test]
     fn hard_break() {
         let doc = Document {
-            blocks: vec![Block::Paragraph(Paragraph {
+            blocks: vec![bws(Block::Paragraph(Paragraph {
                 inlines: vec![
                     Inline::Text("a".into()),
                     Inline::HardBreak,
                     Inline::Text("b".into()),
                 ],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "a\\\nb\n");
     }
@@ -458,7 +468,7 @@ mod tests {
     #[test]
     fn table() {
         let doc = Document {
-            blocks: vec![Block::Table(Table {
+            blocks: vec![bws(Block::Table(Table {
                 header: vec![
                     TableCell {
                         inlines: vec![Inline::Text("a".into())],
@@ -476,7 +486,7 @@ mod tests {
                     },
                 ]],
                 alignments: vec![None, None],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "| a | b |\n| --- | --- |\n| 1 | 2 |\n");
     }
@@ -484,7 +494,7 @@ mod tests {
     #[test]
     fn table_with_alignment() {
         let doc = Document {
-            blocks: vec![Block::Table(Table {
+            blocks: vec![bws(Block::Table(Table {
                 header: vec![
                     TableCell {
                         inlines: vec![Inline::Text("a".into())],
@@ -495,7 +505,7 @@ mod tests {
                 ],
                 rows: vec![],
                 alignments: vec![Some(Alignment::Left), Some(Alignment::Center)],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "| a | b |\n| :--- | :---: |\n");
     }
@@ -504,12 +514,12 @@ mod tests {
     fn multiple_blocks_separated_by_blank_line() {
         let doc = Document {
             blocks: vec![
-                Block::Paragraph(Paragraph {
+                bws(Block::Paragraph(Paragraph {
                     inlines: vec![Inline::Text("a".into())],
-                }),
-                Block::Paragraph(Paragraph {
+                })),
+                bws(Block::Paragraph(Paragraph {
                     inlines: vec![Inline::Text("b".into())],
-                }),
+                })),
             ],
         };
         assert_eq!(to_markdown(&doc), "a\n\nb\n");
@@ -517,10 +527,8 @@ mod tests {
 
     #[test]
     fn nested_ordered_list_indent_follows_prefix_len() {
-        // 有序列表嵌套：子项缩进 = 父级 prefix 长度（3 for "1. "）
-        // 当前实现：子列表继承父级 ordered/start，故子项 marker 也是 "1. "
         let doc = Document {
-            blocks: vec![Block::List(List {
+            blocks: vec![bws(Block::List(List {
                 ordered: true,
                 start: 1,
                 items: vec![ListItem {
@@ -530,17 +538,15 @@ mod tests {
                         sub_items: vec![],
                     }],
                 }],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "1. 顶\n   1. 嵌\n");
     }
 
     #[test]
     fn nested_ordered_list_start_10_indent_4() {
-        // 父级 start=10 → "10. " 长度 4，子项缩进应为 4
-        // 当前实现：子列表继承父级 ordered/start，故子项 marker 也是 "10. "
         let doc = Document {
-            blocks: vec![Block::List(List {
+            blocks: vec![bws(Block::List(List {
                 ordered: true,
                 start: 10,
                 items: vec![ListItem {
@@ -550,7 +556,7 @@ mod tests {
                         sub_items: vec![],
                     }],
                 }],
-            })],
+            }))],
         };
         assert_eq!(to_markdown(&doc), "10. 顶\n    10. 嵌\n");
     }
