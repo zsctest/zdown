@@ -5,8 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+embed-fonts = []
+
 [lints]
 workspace = true
 
 [dependencies]
 thiserror.workspace = true
+genpdf.workspace = true
+font-kit.workspace = true
+document_model.workspace = true

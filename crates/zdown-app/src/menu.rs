@@ -61,6 +61,9 @@ pub fn show_menu(
                 if ui.button("另存为... (Ctrl+Shift+S)").clicked() {
                     trigger_save_as(state);
                 }
+                if ui.button("导出 PDF...").clicked() {
+                    trigger_export_pdf(state);
+                }
 
                 ui.separator();
 
@@ -182,6 +185,29 @@ fn trigger_open(state: &mut EditorState) {
 fn trigger_save_as(state: &mut EditorState) {
     if let Some(path) = workspace::pick_save_file() {
         let _ = state.save_as(&path);
+    }
+}
+
+fn trigger_export_pdf(state: &mut EditorState) {
+    if let Some(mut path) = workspace::pick_save_file_pdf() {
+        if path.extension().is_none_or(|e| e != "pdf") {
+            path.set_extension("pdf");
+        }
+        let config = export_engine::PdfConfig::default();
+        let doc = state.current_doc();
+        match export_engine::generate_pdf(&doc, &config) {
+            Ok(pdf_bytes) => {
+                if let Err(e) = std::fs::write(&path, &pdf_bytes) {
+                    tracing::error!("PDF 写入失败: {e}");
+                } else {
+                    tracing::info!("PDF 导出成功: {}", path.display());
+                    state.recent.add(path);
+                }
+            }
+            Err(e) => {
+                tracing::error!("PDF 生成失败: {e}");
+            }
+        }
     }
 }
 
