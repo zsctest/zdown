@@ -16,6 +16,9 @@ pub enum Error {
     /// TOML 反序列化错误。
     #[error("TOML 反序列化错误: {0}")]
     TomlDe(#[from] toml::de::Error),
+    /// TOML 序列化错误。
+    #[error("TOML 序列化错误: {0}")]
+    TomlSer(#[from] toml::ser::Error),
     /// 当前路径未设置（save 无路径时）。
     #[error("未设置当前路径")]
     NoCurrentPath,

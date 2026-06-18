@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, Result};
+use crate::Result;
 
 /// 最多保留多少条最近文件。
 const MAX_ENTRIES: usize = 10;
@@ -30,6 +30,9 @@ impl RecentFiles {
 
     /// 从指定路径加载（测试用）。
     pub fn load_from(storage_path: &Path) -> Self {
+        if !storage_path.exists() {
+            return Self::empty_at(storage_path);
+        }
         match std::fs::read_to_string(storage_path) {
             Ok(content) => match toml::from_str::<RecentFileList>(&content) {
                 Ok(list) => Self {
@@ -81,7 +84,7 @@ impl RecentFiles {
                 .map(|p| p.to_string_lossy().into_owned())
                 .collect(),
         };
-        let toml_str = toml::to_string(&list).map_err(|e| Error::Dialog(e.to_string()))?;
+        let toml_str = toml::to_string(&list)?;
         if let Some(parent) = self.storage_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -208,5 +211,18 @@ mod tests {
         assert!(path.exists());
         let content = std::fs::read_to_string(&path).expect("read");
         assert!(content.contains("paths"));
+    }
+
+    #[test]
+    fn roundtrip_chinese_path() {
+        let dir = TempDir::new().expect("tempdir");
+        let storage = dir.path().join("recent.toml");
+        let mut rf = RecentFiles::load_from(&storage);
+        let p = PathBuf::from("/tmp/含中文.md");
+        rf.add(p.clone());
+        rf.save().expect("save");
+
+        let reloaded = RecentFiles::load_from(&storage);
+        assert_eq!(reloaded.list(), &[p]);
     }
 }
