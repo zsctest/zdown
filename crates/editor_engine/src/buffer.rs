@@ -112,9 +112,7 @@ impl Buffer {
         };
         let lo_char = self.cursor_to_char(lo)?;
         let hi_char = self.cursor_to_char(hi)?;
-        if lo_char > hi_char {
-            return Err(Error::InvalidRange);
-        }
+        debug_assert!(lo_char <= hi_char);
         let deleted = self
             .rope
             .get_slice(lo_char..hi_char)
@@ -125,8 +123,9 @@ impl Buffer {
     }
 
     pub fn replace(&mut self, start: Cursor, end: Cursor, text: &str) -> Result<String> {
+        let (lo, _) = crate::cursor::Selection::new(start, end).normalized();
         let deleted = self.delete(start, end)?;
-        self.insert(start, text)?;
+        self.insert(lo, text)?;
         Ok(deleted)
     }
 
@@ -306,6 +305,16 @@ mod tests {
             .expect("replace");
         assert_eq!(old, "hello");
         assert_eq!(b.to_string(), "hi world");
+    }
+
+    #[test]
+    fn replace_reversed_range() {
+        let mut b = Buffer::from_str("abcdef");
+        let old = b
+            .replace(Cursor::new(0, 5), Cursor::new(0, 2), "X")
+            .expect("replace");
+        assert_eq!(old, "cde");
+        assert_eq!(b.to_string(), "abXf");
     }
 
     #[test]
