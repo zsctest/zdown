@@ -39,6 +39,8 @@ pub struct EditorState {
     workspace: Workspace,
     /// 标记是否应退出（Quit 菜单触发）。
     pub should_exit: bool,
+    /// 状态栏消息（如导出成功/失败），每帧渲染后由 UI 层清除。
+    pub status_message: String,
 }
 
 /// open / save 等操作的结果。
@@ -146,6 +148,7 @@ impl EditorState {
             recent: RecentFiles::load(),
             workspace: Workspace::new(),
             should_exit: false,
+            status_message: String::new(),
         }
     }
 

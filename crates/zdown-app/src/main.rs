@@ -119,6 +119,18 @@ impl eframe::App for ZdownApp {
             tab_bar::show_tab_bar(ui, &mut self.state, &mut self.confirm);
         }
 
+        // 状态栏（导出结果等）
+        if !self.state.status_message.is_empty() {
+            egui::TopBottomPanel::bottom("status_bar").show_inside(ui, |ui| {
+                ui.label(
+                    egui::RichText::new(&self.state.status_message)
+                        .size(12.0)
+                        .weak(),
+                );
+            });
+            self.state.status_message.clear();
+        }
+
         let highlighter = self.highlighter.as_ref();
 
         // 大纲侧边栏 + 中央视图区域

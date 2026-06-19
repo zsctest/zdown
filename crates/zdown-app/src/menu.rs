@@ -210,8 +210,10 @@ fn trigger_export_pdf(state: &mut EditorState) {
             Ok(pdf_bytes) => {
                 if let Err(e) = std::fs::write(&path, &pdf_bytes) {
                     tracing::error!("PDF 写入失败: {e}");
+                    state.status_message = format!("PDF 导出失败: {e}");
                 } else {
                     tracing::info!("PDF 导出成功: {}", path.display());
+                    state.status_message = format!("PDF 已导出: {}", path.display());
                     state.recent.add(path);
                 }
             }
@@ -241,8 +243,10 @@ fn trigger_export_html(state: &mut EditorState, app_config: &AppConfig) {
             Ok(html_str) => {
                 if let Err(e) = std::fs::write(&path, &html_str) {
                     tracing::error!("HTML 写入失败: {e}");
+                    state.status_message = format!("HTML 导出失败: {e}");
                 } else {
                     tracing::info!("HTML 导出成功: {}", path.display());
+                    state.status_message = format!("HTML 已导出: {}", path.display());
                     state.recent.add(path);
                 }
             }
