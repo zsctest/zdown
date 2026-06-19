@@ -4,6 +4,8 @@
 //! `render_inline_to_paragraph` applies per-inline styling
 //! (emph, strong, code, link, etc.) into a Paragraph.
 
+use image::GenericImageView;
+
 use genpdf::Element;
 use genpdf::elements::{Break, FrameCellDecorator, LinearLayout, Paragraph, TableLayout};
 use genpdf::style::{Color, Style};
@@ -18,7 +20,6 @@ use document_model::ast::{
 };
 
 /// 行内元素分段：按 Image 边界切分。
-#[allow(dead_code)]
 enum InlineSegment {
     /// 纯文本/样式的连续行内元素。
     Text(Vec<Inline>),
@@ -26,12 +27,12 @@ enum InlineSegment {
     Image {
         alt: String,
         url: String,
-        title: Option<String>,
+        /// 图片 title（暂未使用，保留供后续扩展）。
+        _title: Option<String>,
     },
 }
 
 /// 将 inlines 列表按 `Inline::Image` 边界切分为 Text/Image 段。
-#[allow(dead_code)]
 fn split_inlines(inlines: &[Inline]) -> Vec<InlineSegment> {
     let mut segments: Vec<InlineSegment> = Vec::new();
     let mut current_text: Vec<Inline> = Vec::new();
@@ -46,7 +47,7 @@ fn split_inlines(inlines: &[Inline]) -> Vec<InlineSegment> {
                 segments.push(InlineSegment::Image {
                     alt: alt.clone(),
                     url: url.clone(),
-                    title: title.clone(),
+                    _title: title.clone(),
                 });
             }
             other => {
@@ -70,7 +71,6 @@ fn split_inlines(inlines: &[Inline]) -> Vec<InlineSegment> {
 ///
 /// 原则：不放大（scale ≤ 1.0），只缩小超宽图片。
 /// DPI 使用 printpdf 默认值 300。
-#[allow(dead_code)]
 fn auto_fit_scale(px_width: u32, _px_height: u32, max_width_mm: f64) -> genpdf::Scale {
     let dpi: f64 = 300.0;
     let mmpi: f64 = 25.4; // mm per inch
@@ -91,6 +91,14 @@ pub fn render_document(
     _fonts: &FontSet,
 ) -> Result<LinearLayout> {
     let mut layout = LinearLayout::vertical();
+    let working_dir = config.working_dir.as_deref();
+    let paper_width = match config.paper {
+        crate::theme::Paper::A4 => 210.0,
+        crate::theme::Paper::Letter => 215.9,
+        crate::theme::Paper::Custom { width_mm, .. } => width_mm,
+    };
+    let max_width_mm =
+        (paper_width as f64) - (config.margins.left as f64) - (config.margins.right as f64);
     for (i, bws) in doc.blocks.iter().enumerate() {
         if i > 0 {
             let gap = config.theme.spacing.paragraph_gap;
@@ -98,18 +106,45 @@ pub fn render_document(
                 layout.push(Break::new(1));
             }
         }
-        render_block(&bws.block, &config.theme, &mut layout)?;
+        render_block(
+            &bws.block,
+            &config.theme,
+            working_dir,
+            max_width_mm,
+            &mut layout,
+        )?;
     }
     Ok(layout)
 }
 
-fn render_block(block: &Block, theme: &PdfTheme, layout: &mut LinearLayout) -> Result<()> {
+fn render_block(
+    block: &Block,
+    theme: &PdfTheme,
+    working_dir: Option<&std::path::Path>,
+    max_width_mm: f64,
+    layout: &mut LinearLayout,
+) -> Result<()> {
     match block {
-        Block::Heading(h) => layout.push(render_heading(h, theme)),
-        Block::Paragraph(p) => layout.push(render_paragraph(p, theme)),
+        Block::Heading(h) => {
+            render_heading(h, theme, working_dir, max_width_mm, layout);
+        }
+        Block::Paragraph(p) => {
+            render_paragraph(p, theme, working_dir, max_width_mm, layout);
+        }
         Block::CodeBlock(cb) => render_code_block(cb, theme, layout),
-        Block::List(l) => render_list(l.ordered, l.start, &l.items, 0, theme, layout),
-        Block::BlockQuote(bq) => render_blockquote(bq, theme, layout),
+        Block::List(l) => render_list(
+            l.ordered,
+            l.start,
+            &l.items,
+            0,
+            theme,
+            working_dir,
+            max_width_mm,
+            layout,
+        ),
+        Block::BlockQuote(bq) => {
+            render_blockquote(bq, theme, working_dir, max_width_mm, layout);
+        }
         Block::ThematicBreak => {
             layout.push(
                 Paragraph::new("─".repeat(60))
@@ -123,7 +158,68 @@ fn render_block(block: &Block, theme: &PdfTheme, layout: &mut LinearLayout) -> R
     Ok(())
 }
 
-fn render_heading(h: &Heading, theme: &PdfTheme) -> Paragraph {
+/// 将 inlines 按 Image 分段后渲染到 layout。
+/// Text 段 -> Paragraph，Image 段 -> elements::Image。
+fn render_inlines_as_elements(
+    inlines: &[Inline],
+    theme: &PdfTheme,
+    working_dir: Option<&std::path::Path>,
+    max_width_mm: f64,
+    font_size: f32,
+    layout: &mut LinearLayout,
+) {
+    let segments = split_inlines(inlines);
+
+    let body_style = Style::new().with_font_size(font_size as u8);
+
+    for segment in segments {
+        match segment {
+            InlineSegment::Text(text_inlines) => {
+                let mut p = Paragraph::default();
+                for inline in &text_inlines {
+                    render_inline_to_paragraph(&mut p, inline, theme, font_size);
+                }
+                layout.push(p);
+            }
+            InlineSegment::Image { alt, url, .. } => {
+                match crate::image_loader::load_image(&url, working_dir) {
+                    Ok(dyn_img) => {
+                        let (w, h) = dyn_img.dimensions();
+                        let scale = auto_fit_scale(w, h, max_width_mm);
+                        match genpdf::elements::Image::from_dynamic_image(dyn_img) {
+                            Ok(img) => {
+                                layout.push(
+                                    img.with_alignment(genpdf::Alignment::Center)
+                                        .with_scale(scale),
+                                );
+                            }
+                            Err(_) => {
+                                // 降级：占位文本
+                                let mut p = Paragraph::default();
+                                p.push_styled(format!("[图片: {alt}]"), body_style);
+                                layout.push(p);
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // 降级：占位文本
+                        let mut p = Paragraph::default();
+                        p.push_styled(format!("[图片: {alt}]"), body_style);
+                        layout.push(p);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn render_heading(
+    h: &Heading,
+    theme: &PdfTheme,
+    working_dir: Option<&std::path::Path>,
+    max_width_mm: f64,
+    layout: &mut LinearLayout,
+) {
     let font_size = match h.level {
         1 => theme.font_size.h1,
         2 => theme.font_size.h2,
@@ -132,19 +228,31 @@ fn render_heading(h: &Heading, theme: &PdfTheme) -> Paragraph {
         5 => theme.font_size.h5,
         _ => theme.font_size.h6,
     };
-    let mut p = Paragraph::default();
-    for inline in &h.inlines {
-        render_inline_to_paragraph(&mut p, inline, theme, font_size);
-    }
-    p
+    render_inlines_as_elements(
+        &h.inlines,
+        theme,
+        working_dir,
+        max_width_mm,
+        font_size,
+        layout,
+    );
 }
 
-fn render_paragraph(para: &AstParagraph, theme: &PdfTheme) -> Paragraph {
-    let mut p = Paragraph::default();
-    for inline in &para.inlines {
-        render_inline_to_paragraph(&mut p, inline, theme, theme.font_size.body);
-    }
-    p
+fn render_paragraph(
+    para: &AstParagraph,
+    theme: &PdfTheme,
+    working_dir: Option<&std::path::Path>,
+    max_width_mm: f64,
+    layout: &mut LinearLayout,
+) {
+    render_inlines_as_elements(
+        &para.inlines,
+        theme,
+        working_dir,
+        max_width_mm,
+        theme.font_size.body,
+        layout,
+    );
 }
 
 fn render_inline_to_paragraph(
@@ -219,10 +327,16 @@ fn render_code_block(cb: &CodeBlock, theme: &PdfTheme, layout: &mut LinearLayout
     }
 }
 
-fn render_blockquote(bq: &BlockQuote, theme: &PdfTheme, layout: &mut LinearLayout) {
+fn render_blockquote(
+    bq: &BlockQuote,
+    theme: &PdfTheme,
+    working_dir: Option<&std::path::Path>,
+    max_width_mm: f64,
+    layout: &mut LinearLayout,
+) {
     let mut inner = LinearLayout::vertical();
     for bws in &bq.blocks {
-        let _ = render_block(&bws.block, theme, &mut inner);
+        let _ = render_block(&bws.block, theme, working_dir, max_width_mm, &mut inner);
     }
     layout.push(inner.framed().padded((0, 0, 0, 4)));
 }
@@ -246,12 +360,15 @@ fn inlines_to_plain(inlines: &[Inline]) -> String {
     text
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_list(
     ordered: bool,
     start: usize,
     items: &[ListItem],
     depth: usize,
     theme: &PdfTheme,
+    working_dir: Option<&std::path::Path>,
+    max_width_mm: f64,
     layout: &mut LinearLayout,
 ) {
     for (i, item) in items.iter().enumerate() {
@@ -262,18 +379,71 @@ fn render_list(
         };
         let indent = theme.spacing.list_indent * (depth as f32);
 
-        let mut p = Paragraph::default();
-        p.push_styled(
-            &marker,
-            Style::new().with_font_size(theme.font_size.body as u8),
-        );
-        for inline in &item.inlines {
-            render_inline_to_paragraph(&mut p, inline, theme, theme.font_size.body);
+        let segments = split_inlines(&item.inlines);
+
+        for (seg_idx, segment) in segments.into_iter().enumerate() {
+            match segment {
+                InlineSegment::Text(text_inlines) => {
+                    let mut p = Paragraph::default();
+                    // 首个 Text 段添加 marker
+                    if seg_idx == 0 {
+                        p.push_styled(
+                            &marker,
+                            Style::new().with_font_size(theme.font_size.body as u8),
+                        );
+                    }
+                    for inline in &text_inlines {
+                        render_inline_to_paragraph(&mut p, inline, theme, theme.font_size.body);
+                    }
+                    layout.push(p.padded((0, 0, 0, indent)));
+                }
+                InlineSegment::Image { alt, url, .. } => {
+                    match crate::image_loader::load_image(&url, working_dir) {
+                        Ok(dyn_img) => {
+                            let (w, h) = dyn_img.dimensions();
+                            let scale = auto_fit_scale(w, h, max_width_mm);
+                            match genpdf::elements::Image::from_dynamic_image(dyn_img) {
+                                Ok(img) => {
+                                    layout.push(
+                                        img.with_alignment(genpdf::Alignment::Center)
+                                            .with_scale(scale)
+                                            .padded((0, 0, 0, indent)),
+                                    );
+                                }
+                                Err(_) => {
+                                    let mut p = Paragraph::default();
+                                    p.push_styled(
+                                        format!("[图片: {alt}]"),
+                                        Style::new().with_font_size(theme.font_size.body as u8),
+                                    );
+                                    layout.push(p.padded((0, 0, 0, indent)));
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            let mut p = Paragraph::default();
+                            p.push_styled(
+                                format!("[图片: {alt}]"),
+                                Style::new().with_font_size(theme.font_size.body as u8),
+                            );
+                            layout.push(p.padded((0, 0, 0, indent)));
+                        }
+                    }
+                }
+            }
         }
-        layout.push(p.padded((0, 0, 0, indent)));
 
         if !item.sub_items.is_empty() {
-            render_list(ordered, start, &item.sub_items, depth + 1, theme, layout);
+            render_list(
+                ordered,
+                start,
+                &item.sub_items,
+                depth + 1,
+                theme,
+                working_dir,
+                max_width_mm,
+                layout,
+            );
         }
     }
 }
