@@ -1,5 +1,6 @@
 //! export_engine：Markdown → PDF/HTML 导出（阶段 3）。
 
+pub mod decorator;
 pub mod error;
 pub mod font;
 pub mod highlight;
