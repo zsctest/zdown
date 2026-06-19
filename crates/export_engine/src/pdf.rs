@@ -168,4 +168,52 @@ mod tests {
         }
         // Err 可接受（无字体环境）
     }
+
+    #[test]
+    fn template_needs_total_detects_total_placeholder() {
+        use crate::theme::HeaderFooter;
+
+        let hf = HeaderFooter {
+            left: String::new(),
+            center: String::new(),
+            right: "{page}/{total}".into(),
+        };
+        assert!(template_needs_total(&hf));
+
+        let hf2 = HeaderFooter {
+            left: "{total}".into(),
+            center: String::new(),
+            right: String::new(),
+        };
+        assert!(template_needs_total(&hf2));
+
+        let hf3 = HeaderFooter {
+            left: "{file}".into(),
+            center: "{date}".into(),
+            right: "{page}".into(),
+        };
+        assert!(!template_needs_total(&hf3));
+    }
+
+    #[test]
+    fn generate_pdf_with_total_does_not_panic() {
+        let mut config = PdfConfig::default();
+        config.header_footer.right = "{page}/{total}".into();
+        let doc = Document {
+            blocks: vec![BlockWithSpan {
+                block: Block::Paragraph(AstParagraph {
+                    inlines: vec![Inline::Text("test".into())],
+                }),
+                span: Span {
+                    start_line: 0,
+                    end_line: 0,
+                },
+            }],
+        };
+        let result = generate_pdf(&doc, &config);
+        if let Ok(bytes) = result {
+            assert!(!bytes.is_empty(), "两趟渲染应产出非空 PDF");
+        }
+        // Err 可接受（无字体环境）
+    }
 }
