@@ -335,8 +335,7 @@ impl eframe::App for ZdownApp {
                             if ui
                                 .add(
                                     egui::Button::new(
-                                        egui::RichText::new("\u{2715}")
-                                            .color(egui::Color32::RED),
+                                        egui::RichText::new("\u{2715}").color(egui::Color32::RED),
                                     )
                                     .min_size(egui::vec2(20.0, 16.0)),
                                 )
@@ -356,10 +355,7 @@ impl eframe::App for ZdownApp {
                             );
 
                             if ui
-                                .add(
-                                    egui::Button::new("替换")
-                                        .min_size(egui::vec2(48.0, 16.0)),
-                                )
+                                .add(egui::Button::new("替换").min_size(egui::vec2(48.0, 16.0)))
                                 .clicked()
                             {
                                 if let Some(m) = self.search.current_match_pos().cloned() {
@@ -377,26 +373,22 @@ impl eframe::App for ZdownApp {
                                     let src = self.state.editor().to_string();
                                     self.search.search(&src);
                                     if let Some(next) = self.search.current_match_pos().cloned() {
-                                        let _ = self.state.editor_mut().set_cursor(
-                                            Cursor::new(next.line, next.col_start),
-                                        );
+                                        let _ = self
+                                            .state
+                                            .editor_mut()
+                                            .set_cursor(Cursor::new(next.line, next.col_start));
                                     }
                                 }
                             }
 
                             if ui
-                                .add(
-                                    egui::Button::new("全部")
-                                        .min_size(egui::vec2(48.0, 16.0)),
-                                )
+                                .add(egui::Button::new("全部").min_size(egui::vec2(48.0, 16.0)))
                                 .clicked()
                             {
                                 let count = self.search.matches.len();
                                 let mut sorted_matches = self.search.matches.clone();
                                 sorted_matches.sort_by(|a, b| {
-                                    b.line
-                                        .cmp(&a.line)
-                                        .then(b.col_start.cmp(&a.col_start))
+                                    b.line.cmp(&a.line).then(b.col_start.cmp(&a.col_start))
                                 });
                                 let replace_text = self.search.replace.clone();
                                 for m in &sorted_matches {
@@ -422,12 +414,7 @@ impl eframe::App for ZdownApp {
             // 根据视图模式渲染
             match self.view_mode {
                 ViewMode::Source => {
-                    source_view::show_source_view(
-                        ui,
-                        &mut self.state,
-                        highlighter,
-                        &self.search,
-                    );
+                    source_view::show_source_view(ui, &mut self.state, highlighter, &self.search);
                 }
                 ViewMode::Preview => {
                     preview_view::show_preview_view(ui, &mut self.state, &mut self.render_cache);

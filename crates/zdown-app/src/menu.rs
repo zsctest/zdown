@@ -2,8 +2,8 @@
 
 use eframe::egui;
 
-use config::ThemeMode;
 use config::AppConfig;
+use config::ThemeMode;
 
 use crate::editor_state::EditorState;
 use crate::settings_dialog::SettingsDialog;

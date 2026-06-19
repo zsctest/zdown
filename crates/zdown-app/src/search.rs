@@ -69,8 +69,7 @@ fn find_in_line(
         // 比较字符切片
         if cmp_line[col..col + query_len] == cmp_query[..] {
             let is_match = if opts.whole_word {
-                let start_ok =
-                    col == 0 || !line_chars[col - 1].is_alphanumeric();
+                let start_ok = col == 0 || !line_chars[col - 1].is_alphanumeric();
                 let end_ok = col + query_len >= line_chars.len()
                     || !line_chars[col + query_len].is_alphanumeric();
                 start_ok && end_ok
