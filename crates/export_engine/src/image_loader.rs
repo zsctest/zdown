@@ -2,9 +2,13 @@
 //!
 //! 负责从本地路径、base64 data URI 或网络 URL 加载图片。
 
+use std::io::Read;
 use std::path::Path;
+use std::time::Duration;
 
+use base64::Engine;
 use image::DynamicImage;
+use image::GenericImageView;
 
 use crate::Result;
 use crate::error::Error;
@@ -22,7 +26,7 @@ pub fn load_image(url: &str, working_dir: Option<&Path>) -> Result<DynamicImage>
 
 /// 加载 data URI 图片（`data:image/<type>;base64,<data>`）。
 fn load_from_data_uri(url: &str) -> Result<DynamicImage> {
-    let b64: Vec<&str> = url.split(";base64,").collect();
+    let b64: Vec<&str> = url.splitn(2, ";base64,").collect();
     if b64.len() < 2 {
         return Err(Error::ImageLoad("无效 data URI 格式：缺少 ;base64,".into()));
     }
@@ -30,15 +34,13 @@ fn load_from_data_uri(url: &str) -> Result<DynamicImage> {
         .map_err(|e| Error::ImageLoad(format!("base64 解码失败: {e}")))?;
     let img = image::load_from_memory(&bytes)
         .map_err(|e| Error::ImageLoad(format!("图片解码失败: {e}")))?;
-    flatten_alpha(img)
+    Ok(flatten_alpha(img))
 }
 
 /// 加载远程 URL 图片。
 fn load_from_remote(url: &str) -> Result<DynamicImage> {
-    use std::io::Read;
-
     let response = ureq::get(url)
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(Duration::from_secs(10))
         .call()
         .map_err(|e| Error::ImageLoad(format!("远程请求失败: {e}")))?;
     let mut bytes = Vec::new();
@@ -48,36 +50,33 @@ fn load_from_remote(url: &str) -> Result<DynamicImage> {
         .map_err(|e| Error::ImageLoad(format!("读取远程响应失败: {e}")))?;
     let img = image::load_from_memory(&bytes)
         .map_err(|e| Error::ImageLoad(format!("图片解码失败: {e}")))?;
-    flatten_alpha(img)
+    Ok(flatten_alpha(img))
 }
 
 /// 加载本地文件图片。
-fn load_from_local(url: &str, working_dir: Option<&Path>) -> Result<DynamicImage> {
-    let path = std::path::Path::new(url);
+fn load_from_local(path_str: &str, working_dir: Option<&Path>) -> Result<DynamicImage> {
+    let path = std::path::Path::new(path_str);
     let resolved = if path.is_absolute() {
         path.to_path_buf()
     } else {
         let wd = working_dir
             .ok_or_else(|| Error::ImageLoad("相对路径图片需要设置 working_dir".into()))?;
-        wd.join(url)
+        wd.join(path_str)
     };
     let img =
         image::open(&resolved).map_err(|e| Error::ImageLoad(format!("打开本地图片失败: {e}")))?;
-    flatten_alpha(img)
+    Ok(flatten_alpha(img))
 }
 
-/// 将带 alpha 通道的图片展平到白色背景上。
-fn flatten_alpha(img: DynamicImage) -> Result<DynamicImage> {
-    use image::GenericImageView;
-
+/// 将带 alpha 通道的图片展平到白色背景上，返回 RGB 无 alpha 的图片。
+fn flatten_alpha(img: DynamicImage) -> DynamicImage {
     if img.color().has_alpha() {
         let (w, h) = img.dimensions();
         let mut bg = image::RgbaImage::from_pixel(w, h, image::Rgba([255, 255, 255, 255]));
         image::imageops::overlay(&mut bg, &img.to_rgba8(), 0, 0);
-        let rgb = image::DynamicImage::ImageRgba8(bg).to_rgb8();
-        Ok(image::DynamicImage::ImageRgb8(rgb))
+        image::DynamicImage::ImageRgb8(image::DynamicImage::ImageRgba8(bg).to_rgb8())
     } else {
-        Ok(img)
+        img
     }
 }
 
@@ -109,7 +108,6 @@ mod tests {
     /// 测试 3：不存在的本地文件返回错误。
     #[test]
     fn load_from_local_nonexistent() {
-        // 构造一个绝对路径保证不存在的文件
         let nonexistent = std::env::temp_dir().join("__zdown_nonexistent_test__.png");
         let result = load_image(nonexistent.to_str().expect("路径转字符串失败"), None);
         assert!(result.is_err());
@@ -137,7 +135,7 @@ mod tests {
         rgba.put_pixel(0, 1, Rgba([0, 0, 255, 128]));
         rgba.put_pixel(1, 1, Rgba([255, 255, 0, 128]));
         let dyn_img = DynamicImage::ImageRgba8(rgba);
-        let flattened = flatten_alpha(dyn_img).expect("展平应成功");
+        let flattened = flatten_alpha(dyn_img);
         // 展平后应为 RGB8，无 alpha 通道
         assert!(!flattened.color().has_alpha());
         assert_eq!(flattened.width(), 2);
