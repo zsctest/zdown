@@ -131,24 +131,18 @@ pub fn show_menu(
                     *view_mode = ViewMode::Hybrid;
                 }
                 ui.separator();
-                // 主题切换
-                if ui
-                    .add(egui::RadioButton::new(
-                        matches!(theme, ThemeMode::Dark),
-                        "暗黑",
-                    ))
-                    .clicked()
-                {
-                    *theme = ThemeMode::Dark;
-                }
-                if ui
-                    .add(egui::RadioButton::new(
-                        matches!(theme, ThemeMode::Light),
-                        "亮色",
-                    ))
-                    .clicked()
-                {
-                    *theme = ThemeMode::Light;
+
+                // 主题切换：显示可切换到的目标主题
+                let toggle_label = match theme {
+                    ThemeMode::Dark => "☀️ 亮色主题",
+                    ThemeMode::Light => "🌙 暗色主题",
+                };
+                if ui.button(toggle_label).clicked() {
+                    *theme = match theme {
+                        ThemeMode::Dark => ThemeMode::Light,
+                        ThemeMode::Light => ThemeMode::Dark,
+                    };
+                    ui.close();
                 }
             });
         });
