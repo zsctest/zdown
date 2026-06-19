@@ -7,6 +7,7 @@ mod menu;
 mod preview_view;
 mod source_view;
 mod view_mode;
+mod search;
 
 use editor_state::EditorState;
 use eframe::egui;
