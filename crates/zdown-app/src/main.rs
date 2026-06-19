@@ -79,7 +79,18 @@ impl Default for ZdownApp {
             confirm: ConfirmDialog::default(),
             view_mode: ViewMode::default(),
             last_title: String::new(),
-            highlighter: markdown_renderer::SourceHighlighter::new().ok(),
+            highlighter: {
+                let syntax_name = match theme {
+                    ThemeMode::Dark => "base16-ocean.dark",
+                    ThemeMode::Light => "InspiredGitHub",
+                };
+                markdown_renderer::SourceHighlighter::with_theme(syntax_name)
+                    .or_else(|_| {
+                        tracing::warn!("语法主题加载失败: {syntax_name}，使用默认");
+                        markdown_renderer::SourceHighlighter::new()
+                    })
+                    .ok()
+            },
             render_cache: markdown_renderer::RenderCache::new(),
             fold_state: outline_view::OutlineFoldState::default(),
             app_config,

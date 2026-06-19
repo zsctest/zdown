@@ -2,6 +2,7 @@
 
 use eframe::egui;
 
+use config::ThemeMode;
 use config::AppConfig;
 
 use crate::editor_state::EditorState;
@@ -38,6 +39,7 @@ pub fn show_menu(
     view_mode: &mut ViewMode,
     settings_dialog: &mut SettingsDialog,
     app_config: &AppConfig,
+    theme: &mut ThemeMode,
 ) {
     egui::TopBottomPanel::top("menu").show_inside(ui, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -127,6 +129,26 @@ pub fn show_menu(
                 }
                 if ui.button("Hybrid (Ctrl+3)").clicked() {
                     *view_mode = ViewMode::Hybrid;
+                }
+                ui.separator();
+                // 主题切换
+                if ui
+                    .add(egui::RadioButton::new(
+                        matches!(theme, ThemeMode::Dark),
+                        "暗黑",
+                    ))
+                    .clicked()
+                {
+                    *theme = ThemeMode::Dark;
+                }
+                if ui
+                    .add(egui::RadioButton::new(
+                        matches!(theme, ThemeMode::Light),
+                        "亮色",
+                    ))
+                    .clicked()
+                {
+                    *theme = ThemeMode::Light;
                 }
             });
         });
