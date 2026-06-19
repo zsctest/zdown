@@ -62,7 +62,16 @@ pub fn extract_outline(doc: &Document) -> Vec<OutlineItem> {
         .collect()
 }
 
-/// 渲染大纲侧边栏面板。
+/// 查找光标所在 section 的标题索引。
+/// 返回最后一项 `line <= cursor_line` 的标题索引；若光标在所有标题之前则返回 None。
+fn current_heading_index(items: &[OutlineItem], cursor_line: usize) -> Option<usize> {
+    items
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(_, item)| item.line <= cursor_line)
+        .map(|(i, _)| i)
+}
 pub fn show_outline_panel(ui: &mut egui::Ui, state: &mut EditorState) {
     ui.heading("📑 大纲");
 
@@ -74,10 +83,15 @@ pub fn show_outline_panel(ui: &mut egui::Ui, state: &mut EditorState) {
         return;
     }
 
+    // 当前光标所在 section 的标题索引
+    let cursor_line = state.editor.cursor.line;
+    let current_idx = current_heading_index(&items, cursor_line);
+
     egui::ScrollArea::vertical()
         .id_salt("outline_scroll")
         .show(ui, |ui| {
-            for item in &items {
+            for (i, item) in items.iter().enumerate() {
+                let is_current = current_idx == Some(i);
                 let indent = (item.level.saturating_sub(1) as f32) * 16.0;
                 ui.horizontal(|ui| {
                     ui.add_space(indent);
@@ -88,7 +102,7 @@ pub fn show_outline_panel(ui: &mut egui::Ui, state: &mut EditorState) {
                         egui::RichText::new(&item.text).size(13.0).weak()
                     };
 
-                    let response = ui.selectable_label(false, text);
+                    let response = ui.selectable_label(is_current, text);
                     if response.clicked() {
                         let cursor = Cursor::new(item.line, 0);
                         let _ = state.editor.set_cursor(cursor);
@@ -256,5 +270,51 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].text, "标题");
         assert_eq!(items[1].text, "副标题");
+    }
+
+    // ---- current_heading_index ----
+
+    #[test]
+    fn current_heading_cursor_at_first() {
+        let items = vec![
+            OutlineItem {
+                level: 1,
+                text: "A".into(),
+                line: 0,
+            },
+            OutlineItem {
+                level: 1,
+                text: "B".into(),
+                line: 5,
+            },
+            OutlineItem {
+                level: 2,
+                text: "C".into(),
+                line: 8,
+            },
+        ];
+        assert_eq!(current_heading_index(&items, 0), Some(0));
+        assert_eq!(current_heading_index(&items, 4), Some(0));
+        assert_eq!(current_heading_index(&items, 5), Some(1));
+        assert_eq!(current_heading_index(&items, 7), Some(1));
+        assert_eq!(current_heading_index(&items, 8), Some(2));
+        assert_eq!(current_heading_index(&items, 100), Some(2));
+    }
+
+    #[test]
+    fn current_heading_cursor_before_all() {
+        let items = vec![OutlineItem {
+            level: 1,
+            text: "A".into(),
+            line: 3,
+        }];
+        assert_eq!(current_heading_index(&items, 0), None);
+        assert_eq!(current_heading_index(&items, 2), None);
+    }
+
+    #[test]
+    fn current_heading_empty_items() {
+        assert_eq!(current_heading_index(&[], 0), None);
+        assert_eq!(current_heading_index(&[], 42), None);
     }
 }
