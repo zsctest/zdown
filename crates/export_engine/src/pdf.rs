@@ -88,8 +88,7 @@ pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
         );
         let mut doc1 = make_doc(config, &fonts, d1);
         layout_and_push(&mut doc1, doc, config, &fonts)?;
-        doc1
-            .render(&mut std::io::sink())
+        doc1.render(&mut std::io::sink())
             .map_err(|e| crate::Error::Io(std::io::Error::other(e.to_string())))?;
         let total = pc.load(Ordering::Relaxed);
 
