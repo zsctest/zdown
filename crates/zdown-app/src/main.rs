@@ -2,6 +2,7 @@
 
 mod editor_state;
 mod hybrid_view;
+mod image_hosting;
 mod input;
 mod menu;
 mod outline_view;
