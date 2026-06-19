@@ -13,4 +13,7 @@ pub enum Error {
 
     #[error("PDF 渲染错误: {0}")]
     Render(String),
+
+    #[error("图片加载失败: {0}")]
+    ImageLoad(String),
 }

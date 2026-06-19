@@ -14,7 +14,10 @@ workspace = true
 [dependencies]
 thiserror.workspace = true
 chrono.workspace = true
-genpdf.workspace = true
+genpdf = { workspace = true, features = ["images"] }
 font-kit.workspace = true
 document_model.workspace = true
 syntect = { workspace = true, features = ["default-syntaxes", "default-themes"] }
+image = "0.23"
+ureq = { version = "2", default-features = false, features = ["tls"] }
+base64 = "0.22"

@@ -4,6 +4,7 @@ pub mod decorator;
 pub mod error;
 pub mod font;
 pub mod highlight;
+pub mod image_loader;
 pub mod pdf;
 pub mod renderer;
 pub mod theme;
