@@ -51,6 +51,13 @@ fn layout_and_push(
     Ok(())
 }
 
+fn render_to_vec(doc: genpdf::Document) -> Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    doc.render(&mut buf)
+        .map_err(|e| crate::Error::Io(std::io::Error::other(e.to_string())))?;
+    Ok(buf)
+}
+
 /// 将 Document 导出为 PDF，返回完整 PDF 字节。
 pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
     let fonts = FontSet::load(config)?;
@@ -81,8 +88,8 @@ pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
         );
         let mut doc1 = make_doc(config, &fonts, d1);
         layout_and_push(&mut doc1, doc, config, &fonts)?;
-        let mut tmp = Vec::new();
-        doc1.render(&mut tmp)
+        doc1
+            .render(&mut std::io::sink())
             .map_err(|e| crate::Error::Io(std::io::Error::other(e.to_string())))?;
         let total = pc.load(Ordering::Relaxed);
 
@@ -99,10 +106,7 @@ pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
         );
         let mut doc2 = make_doc(config, &fonts, d2);
         layout_and_push(&mut doc2, doc, config, &fonts)?;
-        let mut buf = Vec::new();
-        doc2.render(&mut buf)
-            .map_err(|e| crate::Error::Io(std::io::Error::other(e.to_string())))?;
-        Ok(buf)
+        render_to_vec(doc2)
     } else {
         // 单趟渲染（模板不含 {total}）
         let pc = Arc::new(AtomicUsize::new(0));
@@ -117,11 +121,7 @@ pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
         );
         let mut pdf_doc = make_doc(config, &fonts, d);
         layout_and_push(&mut pdf_doc, doc, config, &fonts)?;
-        let mut buf = Vec::new();
-        pdf_doc
-            .render(&mut buf)
-            .map_err(|e| crate::Error::Io(std::io::Error::other(e.to_string())))?;
-        Ok(buf)
+        render_to_vec(pdf_doc)
     }
 }
 
