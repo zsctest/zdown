@@ -215,4 +215,103 @@ mod tests {
         }
         // Err 可接受（无字体环境）
     }
+
+    #[test]
+    fn generate_pdf_with_image_placeholder_on_missing() {
+        let doc = Document {
+            blocks: vec![BlockWithSpan {
+                block: Block::Paragraph(AstParagraph {
+                    inlines: vec![Inline::Image {
+                        alt: "missing".into(),
+                        url: "nonexistent.png".into(),
+                        title: None,
+                    }],
+                }),
+                span: Span {
+                    start_line: 0,
+                    end_line: 0,
+                },
+            }],
+        };
+        let config = PdfConfig::minimal();
+        let result = generate_pdf(&doc, &config);
+        // 不应返回图片加载错误（降级为占位文本）
+        if let Err(e) = &result {
+            let msg = e.to_string();
+            assert!(
+                !msg.contains("\u{56fe}\u{7247}\u{52a0}\u{8f7d}\u{5931}\u{8d25}"),
+                "missing image should fallback to placeholder, not error: {msg}"
+            );
+        }
+        // 成功时应产生非空 PDF
+        if let Ok(bytes) = &result {
+            assert!(
+                !bytes.is_empty(),
+                "PDF should be non-empty even with missing image"
+            );
+        }
+    }
+
+    #[test]
+    fn generate_pdf_with_data_uri_image() {
+        let red_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
+        let data_uri = format!("data:image/png;base64,{red_png_b64}");
+
+        let doc = Document {
+            blocks: vec![BlockWithSpan {
+                block: Block::Paragraph(AstParagraph {
+                    inlines: vec![Inline::Image {
+                        alt: "red dot".into(),
+                        url: data_uri,
+                        title: None,
+                    }],
+                }),
+                span: Span {
+                    start_line: 0,
+                    end_line: 0,
+                },
+            }],
+        };
+        let config = PdfConfig::minimal();
+        let result = generate_pdf(&doc, &config);
+        if let Ok(bytes) = result {
+            assert!(
+                !bytes.is_empty(),
+                "PDF with embedded image should be non-empty"
+            );
+        }
+        // Err 可接受（无字体环境，字体回退失败）
+    }
+
+    #[test]
+    fn generate_pdf_mixed_text_and_image() {
+        let red_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
+        let data_uri = format!("data:image/png;base64,{red_png_b64}");
+
+        let doc = Document {
+            blocks: vec![BlockWithSpan {
+                block: Block::Paragraph(AstParagraph {
+                    inlines: vec![
+                        Inline::Text("before ".into()),
+                        Inline::Image {
+                            alt: "mid".into(),
+                            url: data_uri,
+                            title: None,
+                        },
+                        Inline::Text(" after".into()),
+                    ],
+                }),
+                span: Span {
+                    start_line: 0,
+                    end_line: 0,
+                },
+            }],
+        };
+        let config = PdfConfig::minimal();
+        let result = generate_pdf(&doc, &config);
+        if let Ok(bytes) = result {
+            assert!(!bytes.is_empty(), "mixed text+image PDF should work");
+        }
+        // Err 可接受（无字体环境）
+    }
 }
