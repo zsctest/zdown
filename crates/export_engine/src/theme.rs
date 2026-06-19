@@ -48,6 +48,8 @@ pub struct PdfTheme {
     pub font_size: FontSizes,
     pub colors: ThemeColors,
     pub spacing: ThemeSpacing,
+    /// syntect 高亮主题名，默认 "InspiredGitHub"（亮色，适合白底 PDF）
+    pub syntax_theme: String,
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +99,7 @@ impl PdfConfig {
             table_border: (100, 100, 100),
             blockquote_border: (120, 120, 255),
         };
+        c.theme.syntax_theme = "base16-ocean.dark".into();
         c
     }
 
@@ -177,6 +180,7 @@ impl Default for PdfConfig {
                     list_indent: 20.0,
                     cell_padding: 4.0,
                 },
+                syntax_theme: "InspiredGitHub".into(),
             },
         }
     }
