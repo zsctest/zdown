@@ -32,11 +32,7 @@ impl CodeHighlighter {
     /// None 时回退为纯文本。
     pub fn highlight(&self, code: &str, language: Option<&str>) -> Vec<HighlightedLine> {
         let syntax = language
-            .and_then(|lang| {
-                self.syntax_set
-                    .find_syntax_by_token(lang)
-                    .or_else(|| self.syntax_set.find_syntax_by_extension(lang))
-            })
+            .and_then(|lang| self.syntax_set.find_syntax_by_token(lang))
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
 
         let mut highlighter = HighlightLines::new(syntax, &self.theme);
@@ -46,7 +42,11 @@ impl CodeHighlighter {
             let ranges: Vec<(syntect::highlighting::Style, &str)> =
                 match highlighter.highlight_line(line, &self.syntax_set) {
                     Ok(r) => r,
-                    Err(_) => vec![(syntect::highlighting::Style::default(), line)],
+                    Err(_) => {
+                        // 出错后重新构造 highlighter 避免状态污染
+                        highlighter = HighlightLines::new(syntax, &self.theme);
+                        vec![(syntect::highlighting::Style::default(), line)]
+                    }
                 };
             let styled: HighlightedLine = ranges
                 .into_iter()
