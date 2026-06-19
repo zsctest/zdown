@@ -6,7 +6,6 @@ use std::io::Read;
 use std::path::Path;
 use std::time::Duration;
 
-use base64::Engine;
 use image::DynamicImage;
 use image::GenericImageView;
 

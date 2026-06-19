@@ -17,6 +17,73 @@ use document_model::ast::{
     Table,
 };
 
+/// 行内元素分段：按 Image 边界切分。
+#[allow(dead_code)]
+enum InlineSegment {
+    /// 纯文本/样式的连续行内元素。
+    Text(Vec<Inline>),
+    /// 图片。
+    Image {
+        alt: String,
+        url: String,
+        title: Option<String>,
+    },
+}
+
+/// 将 inlines 列表按 `Inline::Image` 边界切分为 Text/Image 段。
+#[allow(dead_code)]
+fn split_inlines(inlines: &[Inline]) -> Vec<InlineSegment> {
+    let mut segments: Vec<InlineSegment> = Vec::new();
+    let mut current_text: Vec<Inline> = Vec::new();
+
+    for inline in inlines {
+        match inline {
+            Inline::Image { alt, url, title } => {
+                // 如果有累积的文本，先 push
+                if !current_text.is_empty() {
+                    segments.push(InlineSegment::Text(std::mem::take(&mut current_text)));
+                }
+                segments.push(InlineSegment::Image {
+                    alt: alt.clone(),
+                    url: url.clone(),
+                    title: title.clone(),
+                });
+            }
+            other => {
+                current_text.push(other.clone());
+            }
+        }
+    }
+
+    // 不要漏掉末尾的文本
+    if !current_text.is_empty() {
+        segments.push(InlineSegment::Text(current_text));
+    } else if segments.is_empty() {
+        // 全空列表 → 一个空 Text 段（保持返回至少一段）
+        segments.push(InlineSegment::Text(Vec::new()));
+    }
+
+    segments
+}
+
+/// 根据图片像素尺寸和页面最大宽度计算缩放比例。
+///
+/// 原则：不放大（scale ≤ 1.0），只缩小超宽图片。
+/// DPI 使用 printpdf 默认值 300。
+#[allow(dead_code)]
+fn auto_fit_scale(px_width: u32, _px_height: u32, max_width_mm: f64) -> genpdf::Scale {
+    let dpi: f64 = 300.0;
+    let mmpi: f64 = 25.4; // mm per inch
+    let img_width_mm = (px_width as f64 / dpi) * mmpi;
+
+    if img_width_mm <= max_width_mm {
+        genpdf::Scale::new(1.0, 1.0)
+    } else {
+        let ratio = max_width_mm / img_width_mm;
+        genpdf::Scale::new(ratio, ratio)
+    }
+}
+
 /// Render a complete `Document` into a vertical genpdf layout.
 pub fn render_document(
     doc: &Document,
@@ -272,4 +339,105 @@ fn inlines_to_richtext_str(inlines: &[Inline]) -> String {
         }
     }
     text
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+    use document_model::ast::Inline;
+
+    fn text(s: &str) -> Inline {
+        Inline::Text(s.into())
+    }
+
+    fn image(alt: &str, url: &str) -> Inline {
+        Inline::Image {
+            alt: alt.into(),
+            url: url.into(),
+            title: None,
+        }
+    }
+
+    #[test]
+    fn split_inlines_no_image() {
+        let inlines = vec![text("hello"), text(" world")];
+        let segments = split_inlines(&inlines);
+        assert_eq!(segments.len(), 1, "all text -> single Text segment");
+        match &segments[0] {
+            InlineSegment::Text(t) => assert_eq!(t.len(), 2),
+            _ => panic!("expected Text segment"),
+        }
+    }
+
+    #[test]
+    fn split_inlines_single_image() {
+        let inlines = vec![image("alt", "test.png")];
+        let segments = split_inlines(&inlines);
+        assert_eq!(segments.len(), 1);
+        match &segments[0] {
+            InlineSegment::Image { alt, url, .. } => {
+                assert_eq!(alt, "alt");
+                assert_eq!(url, "test.png");
+            }
+            _ => panic!("expected Image segment"),
+        }
+    }
+
+    #[test]
+    fn split_inlines_mixed() {
+        let inlines = vec![text("before "), image("mid", "mid.png"), text(" after")];
+        let segments = split_inlines(&inlines);
+        assert_eq!(segments.len(), 3, "text + image + text = 3 segments");
+        match (&segments[0], &segments[1], &segments[2]) {
+            (InlineSegment::Text(_), InlineSegment::Image { .. }, InlineSegment::Text(_)) => {}
+            _ => panic!("expected Text, Image, Text order"),
+        }
+    }
+
+    #[test]
+    fn split_inlines_consecutive_images() {
+        let inlines = vec![image("a", "a.png"), image("b", "b.png"), text("trailing")];
+        let segments = split_inlines(&inlines);
+        assert_eq!(segments.len(), 3, "img + img + text = 3 segments");
+    }
+
+    #[test]
+    fn split_inlines_empty() {
+        let segments = split_inlines(&[]);
+        assert_eq!(segments.len(), 1);
+        match &segments[0] {
+            InlineSegment::Text(t) => assert!(t.is_empty()),
+            _ => panic!("expected empty Text segment"),
+        }
+    }
+
+    #[test]
+    fn auto_fit_scale_small_image() {
+        let scale = auto_fit_scale(100, 100, 159.2);
+        assert!(
+            (scale.x - 1.0).abs() < 0.001,
+            "small image x scale should be 1.0: got {}",
+            scale.x
+        );
+        assert!(
+            (scale.y - 1.0).abs() < 0.001,
+            "small image y scale should be 1.0: got {}",
+            scale.y
+        );
+    }
+
+    #[test]
+    fn auto_fit_scale_large_image() {
+        // 600px @300dpi ≈ 50.8mm, max_width=25.4mm → scale ≈ 0.5
+        let scale = auto_fit_scale(600, 300, 25.4);
+        assert!(
+            scale.x < 1.0,
+            "large image should be scaled down, got {}",
+            scale.x
+        );
+        assert!(
+            (scale.x - scale.y).abs() < 0.001,
+            "x and y scale should be equal"
+        );
+    }
 }
