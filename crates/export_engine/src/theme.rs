@@ -195,6 +195,7 @@ mod tests {
         let c = PdfConfig::default();
         assert!(matches!(c.paper, Paper::A4));
         assert_eq!(c.theme.colors.text, (0, 0, 0));
+        assert_eq!(c.theme.syntax_theme, "InspiredGitHub");
     }
 
     #[test]
@@ -202,6 +203,7 @@ mod tests {
         let c = PdfConfig::dark();
         assert_eq!(c.theme.colors.text, (220, 220, 220));
         assert_eq!(c.theme.colors.code_bg, (60, 60, 60));
+        assert_eq!(c.theme.syntax_theme, "base16-ocean.dark");
     }
 
     #[test]
@@ -210,5 +212,11 @@ mod tests {
         assert!(c.header_footer.left.is_empty());
         assert!(c.header_footer.center.is_empty());
         assert!(c.header_footer.right.is_empty());
+    }
+
+    #[test]
+    fn minimal_inherits_default_syntax_theme() {
+        let c = PdfConfig::minimal();
+        assert_eq!(c.theme.syntax_theme, "InspiredGitHub");
     }
 }
