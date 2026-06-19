@@ -147,10 +147,10 @@ pub fn show_outline_panel(
     state: &mut EditorState,
     fold_state: &mut OutlineFoldState,
 ) {
-    ui.heading("📑 大纲");
-
     let doc = state.current_doc();
     let items = extract_outline(&doc);
+
+    ui.heading(format!("📑 大纲 ({})", items.len()));
 
     // 检测文档结构变化，若指纹不匹配则重置折叠状态
     let fp = compute_outline_fingerprint(&items);
