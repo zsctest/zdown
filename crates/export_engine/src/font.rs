@@ -75,13 +75,20 @@ fn find_system_font(name: &str) -> Option<Vec<u8>> {
     }
 }
 
-/// 编译期内嵌的后备字体数据。fonts 目录为空时返回空 Vec。
+/// 编译期内嵌的后备字体数据。
+/// 当 `embed-fonts` feature 启用且字体文件存在时，
+/// 返回对应 TTF 字节；否则返回空 Vec。
 fn get_fallback_ttf(name: &str) -> Vec<u8> {
     let _ = name;
-    // 如果 fonts/NotoSansCJKsc-Regular-subset.ttf 存在，include_bytes! 加载
     #[cfg(feature = "embed-fonts")]
     {
-        if name.contains("CJK") && !name.contains("Mono") {
+        let name_lower = name.to_lowercase();
+        // 正文/标题/常规 CJK 字体
+        if name_lower.contains("cjk") || name_lower.contains("sans") {
+            return include_bytes!("../fonts/NotoSansCJKsc-Regular-subset.ttf").to_vec();
+        }
+        // mono/等宽字体回退到同一个 CJK 字体（Noto Sans CJK SC 包含等宽英文/数字字形）
+        if name_lower.contains("mono") {
             return include_bytes!("../fonts/NotoSansCJKsc-Regular-subset.ttf").to_vec();
         }
     }

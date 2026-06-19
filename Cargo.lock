@@ -1331,6 +1331,7 @@ dependencies = [
  "document_model",
  "font-kit",
  "genpdf",
+ "syntect",
  "thiserror 2.0.18",
 ]
 

@@ -130,16 +130,10 @@ fn render_code_block(cb: &CodeBlock, theme: &PdfTheme, layout: &mut LinearLayout
         for line in &lines {
             let mut p = Paragraph::default();
             if line.is_empty() {
-                p.push_styled(
-                    " ",
-                    Style::new().with_font_size(code_font_size),
-                );
+                p.push_styled(" ", Style::new().with_font_size(code_font_size));
             } else {
                 for (style, text) in line {
-                    p.push_styled(
-                        text.as_str(),
-                        style.with_font_size(code_font_size),
-                    );
+                    p.push_styled(text.as_str(), style.with_font_size(code_font_size));
                 }
             }
             inner.push(p);
@@ -151,8 +145,7 @@ fn render_code_block(cb: &CodeBlock, theme: &PdfTheme, layout: &mut LinearLayout
         for line in cb.content.lines() {
             inner.push(
                 Paragraph::new(line.to_owned())
-                    .styled(Style::new()
-                        .with_font_size(theme.font_size.code as u8)),
+                    .styled(Style::new().with_font_size(theme.font_size.code as u8)),
             );
         }
         layout.push(inner.padded((4, 4, 4, 4)).framed());

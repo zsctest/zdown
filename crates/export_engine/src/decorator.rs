@@ -171,13 +171,7 @@ mod tests {
             Ok(f) => f,
             Err(_) => return,
         };
-        let d = ZdownPageDecorator::new(
-            config,
-            fonts,
-            "mydoc.md".into(),
-            "2026-06-19".into(),
-            9.0,
-        );
+        let d = ZdownPageDecorator::new(config, fonts, "mydoc.md".into(), "2026-06-19".into(), 9.0);
         assert_eq!(d.fill_template("{file}"), "mydoc.md");
         assert_eq!(d.fill_template("{date}"), "2026-06-19");
         assert_eq!(d.fill_template("{page}"), "0");
