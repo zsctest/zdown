@@ -89,7 +89,10 @@ mod tests {
     fn load_from_data_uri_success() {
         let b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
         let uri = format!("data:image/png;base64,{b64}");
-        let img = load_image(&uri, None).expect("应从有效 data URI 加载图片");
+        let img = match load_image(&uri, None) {
+            Ok(img) => img,
+            Err(e) => panic!("应从有效 data URI 加载图片，但失败: {e}"),
+        };
         assert_eq!(img.width(), 1);
         assert_eq!(img.height(), 1);
     }
@@ -99,28 +102,33 @@ mod tests {
     fn load_from_data_uri_invalid_base64() {
         let uri = "data:image/png;base64,!!!not-valid-base64!!!";
         let result = load_image(uri, None);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("base64 解码失败"));
+        match result {
+            Err(e) => assert!(e.to_string().contains("base64 解码失败")),
+            Ok(_) => panic!("无效 base64 应返回错误"),
+        }
     }
 
     /// 测试 3：不存在的本地文件返回错误。
     #[test]
     fn load_from_local_nonexistent() {
         let nonexistent = std::env::temp_dir().join("__zdown_nonexistent_test__.png");
-        let result = load_image(nonexistent.to_str().expect("路径转字符串失败"), None);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("打开本地图片失败"));
+        let path_str = match nonexistent.to_str() {
+            Some(s) => s,
+            None => panic!("临时路径不是有效 UTF-8"),
+        };
+        match load_image(path_str, None) {
+            Err(e) => assert!(e.to_string().contains("打开本地图片失败")),
+            Ok(_) => panic!("不存在的文件应返回错误"),
+        }
     }
 
     /// 测试 4：相对路径但未提供 working_dir 返回错误。
     #[test]
     fn load_from_local_relative_without_working_dir() {
-        let result = load_image("relative/image.png", None);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("相对路径图片需要设置 working_dir"));
+        match load_image("relative/image.png", None) {
+            Err(e) => assert!(e.to_string().contains("相对路径图片需要设置 working_dir")),
+            Ok(_) => panic!("无 working_dir 的相对路径应返回错误"),
+        }
     }
 
     /// 测试 5：半透明 RGBA 图片展平后无 alpha 通道。
