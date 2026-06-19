@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod font;
+pub mod highlight;
 pub mod pdf;
 pub mod renderer;
 pub mod theme;
