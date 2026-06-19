@@ -51,6 +51,8 @@ struct ZdownApp {
     highlighter: Option<markdown_renderer::SourceHighlighter>,
     /// 渲染缓存（LRU 10 条）。
     render_cache: markdown_renderer::RenderCache,
+    /// 大纲面板折叠状态。
+    fold_state: outline_view::OutlineFoldState,
 }
 
 impl Default for ZdownApp {
@@ -62,6 +64,7 @@ impl Default for ZdownApp {
             last_title: String::new(),
             highlighter: markdown_renderer::SourceHighlighter::new().ok(),
             render_cache: markdown_renderer::RenderCache::new(),
+            fold_state: outline_view::OutlineFoldState::default(),
         }
     }
 }
@@ -98,7 +101,7 @@ impl eframe::App for ZdownApp {
             .default_width(200.0)
             .min_width(60.0)
             .show_inside(ui, |ui| {
-                outline_view::show_outline_panel(ui, &mut self.state);
+                outline_view::show_outline_panel(ui, &mut self.state, &mut self.fold_state);
             });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
