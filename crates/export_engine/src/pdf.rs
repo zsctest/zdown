@@ -1,5 +1,8 @@
 //! PDF 导出入口：generate_pdf(doc, config) -> Result<Vec<u8>>。
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+
 use document_model::ast::Document;
 
 use crate::Result;
@@ -39,12 +42,15 @@ pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
         genpdf::Mm::from(config.margins.left),
     );
 
+    let page_counter = Arc::new(AtomicUsize::new(0));
     let decorator = crate::decorator::ZdownPageDecorator::new(
         config.header_footer.clone(),
         genpdf_margins,
         file_name,
         date_str,
         config.theme.font_size.header_footer,
+        page_counter,
+        None,
     );
     pdf_doc.set_page_decorator(decorator);
 

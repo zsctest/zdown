@@ -2,6 +2,9 @@
 //!
 //! 实现 genpdf::PageDecorator trait，替代 SimplePageDecorator。
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use crate::theme::HeaderFooter;
 
 use genpdf::elements::Paragraph;
@@ -9,7 +12,8 @@ use genpdf::style::{Color, Style};
 use genpdf::{Alignment, Context, Element, Mm, PageDecorator, Position};
 
 pub struct ZdownPageDecorator {
-    page: usize,
+    page_counter: Arc<AtomicUsize>,
+    total_pages: Option<usize>,
     config: HeaderFooter,
     margins: genpdf::Margins,
     file_name: String,
@@ -24,9 +28,12 @@ impl ZdownPageDecorator {
         file_name: String,
         date_str: String,
         font_size: f32,
+        page_counter: Arc<AtomicUsize>,
+        total_pages: Option<usize>,
     ) -> Self {
         Self {
-            page: 0,
+            page_counter,
+            total_pages,
             config,
             margins,
             file_name,
@@ -35,23 +42,26 @@ impl ZdownPageDecorator {
         }
     }
 
-    fn fill_template(&self, template: &str) -> String {
+    fn fill_template(&self, template: &str, page: usize) -> String {
         if template.is_empty() {
             return String::new();
         }
         template
-            .replace("{page}", &self.page.to_string())
-            .replace("{total}", "?")
+            .replace("{page}", &page.to_string())
+            .replace(
+                "{total}",
+                &self.total_pages.map_or("?".into(), |n| n.to_string()),
+            )
             .replace("{file}", &self.file_name)
             .replace("{date}", &self.date_str)
     }
 
     /// 拼接左/中/右为一个字符串，用空格分隔。
-    fn build_line(&self) -> String {
+    fn build_line(&self, page: usize) -> String {
         let parts: [&str; 3] = [&self.config.left, &self.config.center, &self.config.right];
         let filled: Vec<String> = parts
             .iter()
-            .map(|t| self.fill_template(t))
+            .map(|t| self.fill_template(t, page))
             .filter(|s| !s.is_empty())
             .collect();
         filled.join("    ")
@@ -71,13 +81,13 @@ impl PageDecorator for ZdownPageDecorator {
         mut area: genpdf::render::Area<'a>,
         style: Style,
     ) -> Result<genpdf::render::Area<'a>, genpdf::error::Error> {
-        self.page += 1;
+        let page = self.page_counter.fetch_add(1, Ordering::Relaxed) + 1;
 
         // 1. 页边距（来自配置）
         area.add_margins(self.margins);
 
         // 2. 页眉
-        let header_text = self.build_line();
+        let header_text = self.build_line(page);
         if !header_text.is_empty() {
             let mut p = Paragraph::new(header_text)
                 .aligned(Alignment::Center)
@@ -90,7 +100,7 @@ impl PageDecorator for ZdownPageDecorator {
         }
 
         // 3. 页脚
-        let footer_text = self.build_line();
+        let footer_text = self.build_line(page);
         if !footer_text.is_empty() {
             let footer_h = Mm::from(self.font_size as f64 * 0.3528 + 4.0);
             area.set_height(area.size().height - footer_h);
@@ -125,13 +135,20 @@ mod tests {
         )
     }
 
-    fn make_decorator(config: HeaderFooter, file_name: &str, date_str: &str) -> ZdownPageDecorator {
+    fn make_decorator(
+        config: HeaderFooter,
+        file_name: &str,
+        date_str: &str,
+        total_pages: Option<usize>,
+    ) -> ZdownPageDecorator {
         ZdownPageDecorator::new(
             config,
             test_margins(),
             file_name.into(),
             date_str.into(),
             9.0,
+            Arc::new(AtomicUsize::new(0)),
+            total_pages,
         )
     }
 
@@ -142,9 +159,9 @@ mod tests {
             center: String::new(),
             right: String::new(),
         };
-        let d = make_decorator(config, "test.md", "2026-06-19");
-        assert_eq!(d.fill_template("hello"), "hello");
-        assert_eq!(d.fill_template(""), "");
+        let d = make_decorator(config, "test.md", "2026-06-19", None);
+        assert_eq!(d.fill_template("hello", 1), "hello");
+        assert_eq!(d.fill_template("", 1), "");
     }
 
     #[test]
@@ -154,9 +171,9 @@ mod tests {
             center: String::new(),
             right: String::new(),
         };
-        let d = make_decorator(config, "test.md", "2026-06-19");
-        assert_eq!(d.fill_template("{total}"), "?");
-        assert_eq!(d.fill_template("{page}/{total}"), "0/?");
+        let d = make_decorator(config, "test.md", "2026-06-19", None);
+        assert_eq!(d.fill_template("{total}", 0), "?");
+        assert_eq!(d.fill_template("{page}/{total}", 0), "0/?");
     }
 
     #[test]
@@ -166,10 +183,22 @@ mod tests {
             center: "{date}".into(),
             right: "{page}/{total}".into(),
         };
-        let d = make_decorator(config, "mydoc.md", "2026-06-19");
-        assert_eq!(d.fill_template("{file}"), "mydoc.md");
-        assert_eq!(d.fill_template("{date}"), "2026-06-19");
-        assert_eq!(d.fill_template("{page}"), "0");
-        assert_eq!(d.fill_template("{total}"), "?");
+        let d = make_decorator(config, "mydoc.md", "2026-06-19", None);
+        assert_eq!(d.fill_template("{file}", 1), "mydoc.md");
+        assert_eq!(d.fill_template("{date}", 1), "2026-06-19");
+        assert_eq!(d.fill_template("{page}", 1), "1");
+        assert_eq!(d.fill_template("{total}", 1), "?");
+    }
+
+    #[test]
+    fn fill_template_with_known_total() {
+        let config = HeaderFooter {
+            left: String::new(),
+            center: String::new(),
+            right: "{page}/{total}".into(),
+        };
+        let d = make_decorator(config, "test.md", "2026-06-19", Some(5));
+        assert_eq!(d.fill_template("{total}", 1), "5");
+        assert_eq!(d.fill_template("{page}/{total}", 3), "3/5");
     }
 }
