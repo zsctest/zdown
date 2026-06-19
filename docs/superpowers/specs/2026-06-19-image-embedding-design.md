@@ -74,10 +74,14 @@ enum InlineSegment {
 fn render_heading(h: &Heading, theme: &PdfTheme) -> Paragraph
 fn render_paragraph(para: &AstParagraph, theme: &PdfTheme) -> Paragraph
 
-// New
-fn render_heading(h: &Heading, theme: &PdfTheme, layout: &mut LinearLayout)
-fn render_paragraph(para: &AstParagraph, theme: &PdfTheme, layout: &mut LinearLayout)
+// New — accept layout to push into, plus working_dir for image resolution
+fn render_heading(h: &Heading, theme: &PdfTheme, working_dir: Option<&Path>, layout: &mut LinearLayout)
+fn render_paragraph(para: &AstParagraph, theme: &PdfTheme, working_dir: Option<&Path>, layout: &mut LinearLayout)
 ```
+
+**List items with images**: `render_list` also handles inline content. Each list item's inlines are similarly split by `Inline::Image` boundaries. The existing `render_list` function already pushes into `&mut LinearLayout` directly — it will use the same `InlineSegment` split helper for item content.
+
+**`working_dir` threading**: `working_dir` flows from `generate_pdf` → `render_document` → `render_block` → each render function. It is passed as a plain `Option<&Path>` parameter, not stored on the layout.
 
 ### 3.3 Image rendering logic
 
@@ -145,8 +149,6 @@ base64 = "0.22"
 - `load_from_data_uri_png` — valid data URI → DynamicImage
 - `load_from_data_uri_invalid_base64` — returns Err
 - `load_from_local_nonexistent` — returns Err
-- `auto_fit_scale_small_image` — returns (1.0, 1.0) for image < page width
-- `auto_fit_scale_large_image` — returns scale < 1.0
 - `alpha_image_flattened` — image with alpha → no alpha after load
 
 ### Unit tests (`renderer.rs`):
@@ -154,6 +156,8 @@ base64 = "0.22"
 - `split_inlines_single_image` — one Image segment
 - `split_inlines_mixed` — Text, Image, Text segments
 - `split_inlines_consecutive_images` — consecutive Image segments
+- `auto_fit_scale_small_image` — returns (1.0, 1.0) for image < page width
+- `auto_fit_scale_large_image` — returns scale < 1.0
 
 ### Integration tests (`pdf.rs`):
 - `generate_pdf_with_local_image` — generates PDF with embedded image (non-empty output)
