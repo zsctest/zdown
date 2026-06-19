@@ -118,14 +118,48 @@ fn render_inline_to_paragraph(
 }
 
 fn render_code_block(cb: &CodeBlock, theme: &PdfTheme, layout: &mut LinearLayout) {
-    let mut inner = LinearLayout::vertical();
-    for line in cb.content.lines() {
-        inner.push(
-            Paragraph::new(line.to_owned())
-                .styled(Style::new().with_font_size(theme.font_size.code as u8)),
-        );
+    let highlighter = crate::highlight::CodeHighlighter::new(&theme.syntax_theme);
+    let highlighted = highlighter
+        .as_ref()
+        .and_then(|h| {
+            let lang = cb.language.as_deref();
+            Some(h.highlight(&cb.content, lang))
+        });
+
+    if let Some(lines) = highlighted {
+        // 高亮版本：逐行逐 token 渲染
+        let mut inner = LinearLayout::vertical();
+        let code_font_size = theme.font_size.code as u8;
+        for line in &lines {
+            let mut p = Paragraph::default();
+            if line.is_empty() {
+                p.push_styled(
+                    " ",
+                    Style::new().with_font_size(code_font_size),
+                );
+            } else {
+                for (style, text) in line {
+                    p.push_styled(
+                        text.as_str(),
+                        style.with_font_size(code_font_size),
+                    );
+                }
+            }
+            inner.push(p);
+        }
+        layout.push(inner.padded((4, 4, 4, 4)).framed());
+    } else {
+        // 回退：纯文本渲染
+        let mut inner = LinearLayout::vertical();
+        for line in cb.content.lines() {
+            inner.push(
+                Paragraph::new(line.to_owned())
+                    .styled(Style::new()
+                        .with_font_size(theme.font_size.code as u8)),
+            );
+        }
+        layout.push(inner.padded((4, 4, 4, 4)).framed());
     }
-    layout.push(inner.padded((4, 4, 4, 4)).framed());
 }
 
 fn render_blockquote(bq: &BlockQuote, theme: &PdfTheme, layout: &mut LinearLayout) {
