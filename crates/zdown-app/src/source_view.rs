@@ -120,9 +120,9 @@ fn render_text_with_cursor(
                 let m_prefix_galley = ui.ctx().fonts_mut(|f| {
                     f.layout_no_wrap(m_prefix, font_id.clone(), egui::Color32::WHITE)
                 });
-                let m_text_galley = ui.ctx().fonts_mut(|f| {
-                    f.layout_no_wrap(m_text, font_id.clone(), egui::Color32::WHITE)
-                });
+                let m_text_galley = ui
+                    .ctx()
+                    .fonts_mut(|f| f.layout_no_wrap(m_text, font_id.clone(), egui::Color32::WHITE));
                 let bg_x = rect.min.x + m_prefix_galley.size().x;
                 let bg_w = m_text_galley.size().x;
                 let bg_color = if is_current {
@@ -188,14 +188,17 @@ fn render_text_with_cursor(
             // 绘制匹配高亮背景（在文本之前，确保文本在背景之上）
             for &(col_start, col_end, is_current) in &match_ranges {
                 let m_prefix: String = line.chars().take(col_start).collect();
-                let m_text: String =
-                    line.chars().skip(col_start).take(col_end - col_start).collect();
+                let m_text: String = line
+                    .chars()
+                    .skip(col_start)
+                    .take(col_end - col_start)
+                    .collect();
                 let m_prefix_galley = ui.ctx().fonts_mut(|f| {
                     f.layout_no_wrap(m_prefix, font_id.clone(), egui::Color32::WHITE)
                 });
-                let m_text_galley = ui.ctx().fonts_mut(|f| {
-                    f.layout_no_wrap(m_text, font_id.clone(), egui::Color32::WHITE)
-                });
+                let m_text_galley = ui
+                    .ctx()
+                    .fonts_mut(|f| f.layout_no_wrap(m_text, font_id.clone(), egui::Color32::WHITE));
                 let bg_x = rect.min.x + m_prefix_galley.size().x;
                 let bg_w = m_text_galley.size().x;
                 let bg_color = if is_current {

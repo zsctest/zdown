@@ -3,6 +3,7 @@
 use crate::search::{Match, SearchEngine, SearchOptions};
 
 /// 搜索栏 UI 状态，由 ZdownApp 持有。
+#[derive(Default)]
 pub struct SearchState {
     /// 搜索栏是否可见。
     pub visible: bool,
@@ -20,21 +21,6 @@ pub struct SearchState {
     pub current_match: Option<usize>,
     /// 下一帧需请求搜索框焦点。
     pub focus_search: bool,
-}
-
-impl Default for SearchState {
-    fn default() -> Self {
-        Self {
-            visible: false,
-            query: String::new(),
-            replace: String::new(),
-            case_sensitive: false,
-            whole_word: false,
-            matches: Vec::new(),
-            current_match: None,
-            focus_search: false,
-        }
-    }
 }
 
 impl SearchState {
