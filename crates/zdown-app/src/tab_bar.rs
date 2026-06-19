@@ -1,4 +1,4 @@
-//! 标签栏 UI：显示打开的文件标签页，支持切换、关闭和脏标记。
+//! 标签栏 UI：显示打开的文件标签页，支持切换、关闭、脏标记和右键菜单。
 
 use eframe::egui;
 
@@ -23,6 +23,7 @@ pub fn show_tab_bar(ui: &mut egui::Ui, state: &mut EditorState, confirm: &mut Co
                         let is_active = i == active;
                         let dirty = state.tab_is_dirty(i);
                         let title = state.tab_title(i);
+                        let has_path = state.tabs()[i].path.is_some();
 
                         // 标签按钮
                         let tab_text = if dirty {
@@ -32,9 +33,12 @@ pub fn show_tab_bar(ui: &mut egui::Ui, state: &mut EditorState, confirm: &mut Co
                         };
 
                         let tab_btn = if is_active {
-                            egui::SelectableLabel::new(true, egui::RichText::new(tab_text).strong())
+                            egui::SelectableLabel::new(
+                                true,
+                                egui::RichText::new(&tab_text).strong(),
+                            )
                         } else {
-                            egui::SelectableLabel::new(false, tab_text)
+                            egui::SelectableLabel::new(false, &tab_text)
                         };
 
                         let response = ui.add(tab_btn);
@@ -43,6 +47,27 @@ pub fn show_tab_bar(ui: &mut egui::Ui, state: &mut EditorState, confirm: &mut Co
                         if response.clicked() {
                             switch_to = Some(i);
                         }
+
+                        // 右键菜单
+                        let tab_idx = i;
+                        let has_path_for_menu = has_path;
+                        response.context_menu(|ui| {
+                            if ui.button("关闭其他").clicked() {
+                                state.close_other_tabs(tab_idx);
+                                ui.close();
+                            }
+                            if state.tab_count() > tab_idx + 1 && ui.button("关闭右侧").clicked()
+                            {
+                                state.close_tabs_to_right(tab_idx);
+                                ui.close();
+                            }
+                            if has_path_for_menu && ui.button("复制路径").clicked() {
+                                if let Some(ref path) = state.tabs()[tab_idx].path {
+                                    ui.ctx().copy_text(path.display().to_string());
+                                }
+                                ui.close();
+                            }
+                        });
 
                         // 关闭按钮
                         let close_response =
@@ -62,7 +87,6 @@ pub fn show_tab_bar(ui: &mut egui::Ui, state: &mut EditorState, confirm: &mut Co
                         } else {
                             let removed = state.close_tab(i);
                             if !removed {
-                                // 最后一个标签页 → 创建新的空标签页
                                 state.new_file();
                             }
                         }

@@ -136,6 +136,44 @@ impl EditorState {
         }
     }
 
+    /// 关闭除指定索引外的所有标签页。
+    ///
+    /// 返回被关闭的标签页数量。
+    pub fn close_other_tabs(&mut self, keep: usize) -> usize {
+        if keep >= self.tabs.len() {
+            return 0;
+        }
+        let before_count = self.tabs.len();
+        // 从后向前移除（保持索引有效）
+        for i in (0..self.tabs.len()).rev() {
+            if i != keep {
+                self.tabs.remove(i);
+                if i < self.active_tab {
+                    self.active_tab -= 1;
+                }
+            }
+        }
+        self.active_tab = 0; // 保留的标签页成为唯一
+        before_count - self.tabs.len()
+    }
+
+    /// 关闭指定索引右侧的所有标签页。
+    ///
+    /// 返回被关闭的标签页数量。
+    pub fn close_tabs_to_right(&mut self, index: usize) -> usize {
+        if index >= self.tabs.len() {
+            return 0;
+        }
+        let before_count = self.tabs.len();
+        while self.tabs.len() > index + 1 {
+            self.tabs.remove(index + 1);
+        }
+        if self.active_tab > index {
+            self.active_tab = index;
+        }
+        before_count - self.tabs.len()
+    }
+
     /// 指定索引标签页的显示名称。
     pub fn tab_title(&self, index: usize) -> String {
         self.tabs
@@ -745,6 +783,32 @@ mod tests {
 
         s.switch_tab(2); // 切到原来的 tab[2]
         s.move_tab(2, 1); // 左移一位
+        assert_eq!(s.active_tab_index(), 1);
+    }
+
+    #[test]
+    fn close_other_tabs_keeps_only_specified() {
+        let mut s = EditorState::new();
+        s.new_file();
+        s.new_file();
+        s.new_file();
+        assert_eq!(s.tab_count(), 4);
+        let closed = s.close_other_tabs(2);
+        assert_eq!(closed, 3);
+        assert_eq!(s.tab_count(), 1);
+        assert_eq!(s.active_tab_index(), 0);
+    }
+
+    #[test]
+    fn close_tabs_to_right_removes_correct() {
+        let mut s = EditorState::new(); // tab 0
+        s.new_file(); // tab 1
+        s.new_file(); // tab 2
+        s.new_file(); // tab 3
+        s.switch_tab(1);
+        let closed = s.close_tabs_to_right(1);
+        assert_eq!(closed, 2); // tabs 2, 3 closed
+        assert_eq!(s.tab_count(), 2);
         assert_eq!(s.active_tab_index(), 1);
     }
 
