@@ -8,6 +8,9 @@ pub struct PdfConfig {
     pub paper: Paper,
     pub margins: Margins,
     pub header_footer: HeaderFooter,
+    /// 工作目录，用于解析 Markdown 中相对路径的本地图片。
+    /// `None` 时相对路径图片无法加载（降级为占位文本）。
+    pub working_dir: Option<std::path::PathBuf>,
     pub theme: PdfTheme,
 }
 
@@ -143,6 +146,7 @@ impl Default for PdfConfig {
                 center: String::new(),
                 right: String::from("{page}/{total}"),
             },
+            working_dir: None,
             theme: PdfTheme {
                 body_font: FontConfig {
                     name: "Noto Sans CJK SC".into(),
