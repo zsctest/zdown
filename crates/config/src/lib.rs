@@ -26,6 +26,45 @@ pub enum ThemeMode {
     Light,
 }
 
+/// 图片存储策略。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub enum ImageStrategy {
+    #[default]
+    Local,
+    Base64,
+    SmMs,
+}
+
+/// SM.MS 图床配置。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SmMsConfig {
+    /// SM.MS API token（可选，无 token 也可上传但有限制）。
+    pub api_token: String,
+}
+
+/// 图片托管配置。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImageHostingConfig {
+    /// 默认存储策略。
+    pub default_strategy: ImageStrategy,
+    /// 本地图片子目录名。
+    pub local_dir: String,
+    /// SM.MS 配置。
+    pub smms: SmMsConfig,
+}
+
+impl Default for ImageHostingConfig {
+    fn default() -> Self {
+        Self {
+            default_strategy: ImageStrategy::Local,
+            local_dir: "images".into(),
+            smms: SmMsConfig::default(),
+        }
+    }
+}
+
 /// zdown 应用配置。
 ///
 /// `#[serde(default)]` 确保向后兼容：旧版本配置文件
@@ -39,6 +78,8 @@ pub struct AppConfig {
 
     /// UI 主题：暗色或亮色。默认暗色。
     pub theme: ThemeMode,
+    /// 图片托管配置。
+    pub image_hosting: ImageHostingConfig,
 }
 
 impl AppConfig {
@@ -189,6 +230,7 @@ mod tests {
         let config = AppConfig {
             custom_css: None,
             theme: ThemeMode::Light,
+            ..Default::default()
         };
         config.save_to(&path).expect("save");
         let loaded = AppConfig::load_from(&path).expect("load");
@@ -214,6 +256,7 @@ mod tests {
         let config = AppConfig {
             custom_css: None,
             theme: ThemeMode::Light,
+            ..Default::default()
         };
         let toml_str = toml::to_string_pretty(&config).expect("serialize");
         assert!(
@@ -226,5 +269,56 @@ mod tests {
             "TOML 应包含 Light: {}",
             toml_str
         );
+    }
+
+    // ── ImageHostingConfig 测试 ──
+
+    #[test]
+    fn image_hosting_config_default() {
+        let config = ImageHostingConfig::default();
+        assert!(matches!(config.default_strategy, ImageStrategy::Local));
+        assert_eq!(config.local_dir, "images");
+        assert_eq!(config.smms.api_token, "");
+    }
+
+    #[test]
+    fn image_hosting_config_roundtrip() {
+        let path = temp_path("image_hosting");
+        cleanup(&path);
+
+        let config = AppConfig {
+            custom_css: None,
+            theme: ThemeMode::Dark,
+            image_hosting: ImageHostingConfig {
+                default_strategy: ImageStrategy::Base64,
+                local_dir: "assets".into(),
+                smms: SmMsConfig {
+                    api_token: "token123".into(),
+                },
+            },
+        };
+        config.save_to(&path).expect("save");
+        let loaded = AppConfig::load_from(&path).expect("load");
+        assert!(matches!(
+            loaded.image_hosting.default_strategy,
+            ImageStrategy::Base64
+        ));
+        assert_eq!(loaded.image_hosting.local_dir, "assets");
+        assert_eq!(loaded.image_hosting.smms.api_token, "token123");
+        cleanup(&path);
+    }
+
+    #[test]
+    fn old_config_without_image_hosting_defaults() {
+        let path = temp_path("old_img_config");
+        cleanup(&path);
+        std::fs::write(&path, "custom_css = \"h1 { color: red; }\"\n").expect("write");
+        let loaded = AppConfig::load_from(&path).expect("load");
+        assert!(matches!(
+            loaded.image_hosting.default_strategy,
+            ImageStrategy::Local
+        ));
+        assert_eq!(loaded.image_hosting.local_dir, "images");
+        cleanup(&path);
     }
 }
