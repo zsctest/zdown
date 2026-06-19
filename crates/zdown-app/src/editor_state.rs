@@ -200,6 +200,30 @@ impl EditorState {
         Ok(())
     }
 
+    /// 保存所有有路径的脏标签页。
+    ///
+    /// 返回 `(saved, skipped)`：已保存和已跳过（无路径）的数量。
+    pub fn save_all(&mut self) -> (usize, usize) {
+        let mut saved = 0;
+        let mut skipped = 0;
+        for tab in &mut self.tabs {
+            if !tab.editor.is_dirty() {
+                continue;
+            }
+            if let Some(ref path) = tab.path {
+                let src = tab.editor.to_string();
+                let doc = parse(&src).unwrap_or(Document { blocks: vec![] });
+                if self.workspace.save_to(path, &doc).is_ok() {
+                    tab.editor.mark_saved();
+                    saved += 1;
+                }
+            } else {
+                skipped += 1;
+            }
+        }
+        (saved, skipped)
+    }
+
     /// 另存为。
     pub fn save_as(&mut self, path: &Path) -> OperationResult {
         let doc = self.current_doc();
@@ -688,5 +712,47 @@ mod tests {
         assert_eq!(s.active_tab_index(), 0);
         s.prev_tab();
         assert_eq!(s.active_tab_index(), 2);
+    }
+
+    #[test]
+    fn save_all_saves_dirty_tabs_with_paths() {
+        let dir = TempDir::new().expect("tempdir");
+        let p1 = dir.path().join("a.md");
+        let p2 = dir.path().join("b.md");
+        let p3 = dir.path().join("c.md");
+        std::fs::write(&p1, "# A\n").expect("write");
+        std::fs::write(&p2, "# B\n").expect("write");
+        std::fs::write(&p3, "# C\n").expect("write");
+
+        let mut s = EditorState::new();
+
+        // tab 0: named, dirty
+        s.open(&p1).expect("open 1");
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "X".into(),
+        })
+        .expect("apply");
+        assert!(s.is_dirty());
+
+        // tab 1: named, clean
+        s.new_file();
+        s.open(&p2).expect("open 2");
+        assert!(!s.is_dirty());
+
+        // tab 2: unnamed, dirty
+        s.new_file();
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "Y".into(),
+        })
+        .expect("apply");
+
+        // save_all: tab0 saved, tab1 skipped (clean), tab2 skipped (unnamed)
+        let (saved, skipped) = s.save_all();
+        assert_eq!(saved, 1);
+        assert_eq!(skipped, 1);
+        assert!(!s.tab_is_dirty(0)); // tab 0 now clean
+        assert!(s.tab_is_dirty(2)); // tab 2 still dirty (skipped)
     }
 }

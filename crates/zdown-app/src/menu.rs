@@ -58,6 +58,15 @@ pub fn show_menu(
                 if ui.button("另存为... (Ctrl+Shift+S)").clicked() {
                     trigger_save_as(state);
                 }
+                if ui.button("保存所有").clicked() {
+                    let (saved, skipped) = state.save_all();
+                    let mut msg = format!("保存完成：{saved} 个文件");
+                    if skipped > 0 {
+                        msg.push_str(&format!("，{skipped} 个未命名文件已跳过"));
+                    }
+                    state.status_message = msg;
+                }
+                ui.separator();
                 if ui.button("导出 PDF...").clicked() {
                     trigger_export_pdf(state);
                 }
