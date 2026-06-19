@@ -2,7 +2,6 @@
 //!
 //! 被 source_view 和 hybrid_view 共用。
 
-use config;
 use editor_engine::{Command, Cursor, Editor};
 use eframe::egui;
 
@@ -171,15 +170,13 @@ pub(crate) fn handle_dropped_images(
         }
         let data = match &file.bytes {
             Some(b) => b.to_vec(),
-            None => {
-                match &file.path {
-                    Some(p) => match std::fs::read(p) {
-                        Ok(b) => b,
-                        Err(_) => continue,
-                    },
-                    None => continue,
-                }
-            }
+            None => match &file.path {
+                Some(p) => match std::fs::read(p) {
+                    Ok(b) => b,
+                    Err(_) => continue,
+                },
+                None => continue,
+            },
         };
         let name = file
             .path
@@ -198,7 +195,10 @@ pub(crate) fn handle_dropped_images(
                     format!("\n![{name}]({url})")
                 };
                 let cursor = editor.cursor;
-                let _ = editor.apply(Command::Insert { pos: cursor, text: md_text });
+                let _ = editor.apply(Command::Insert {
+                    pos: cursor,
+                    text: md_text,
+                });
                 inserted += 1;
             }
             Err(_) => {

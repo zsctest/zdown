@@ -2,7 +2,6 @@
 //!
 //! 用 BlockWithSpan 的 span 查找光标所在 block，避免按行切割破坏多行结构。
 
-use config;
 use eframe::egui;
 use markdown_renderer::SourceHighlighter;
 

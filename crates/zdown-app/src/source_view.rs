@@ -7,7 +7,6 @@
 //! - 事件转 editor_engine::Command（Insert/Delete）推入历史
 //! - ui.painter 绘制光标矩形（精确像素定位）
 
-use config;
 use eframe::egui;
 use markdown_renderer::SourceHighlighter;
 

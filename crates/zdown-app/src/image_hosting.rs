@@ -93,8 +93,7 @@ impl ImageStorage for LocalStorage {
             Some(dir) => dir.join(&self.local_dir),
             None => std::env::temp_dir().join("zdown_images"),
         };
-        fs::create_dir_all(&base_dir)
-            .map_err(|e| format!("创建图片目录失败: {e}"))?;
+        fs::create_dir_all(&base_dir).map_err(|e| format!("创建图片目录失败: {e}"))?;
 
         let ext = format.extension();
         let name = sanitize_filename(filename, ext);
@@ -128,7 +127,7 @@ fn sanitize_filename(name: &str, default_ext: &str) -> String {
         || lower.ends_with(".webp")
         || lower.ends_with(".svg");
     if has_known_ext {
-        let stem = &name[..name.rfind('.').unwrap()];
+        let stem = &name[..name.rfind('.').unwrap_or(name.len())];
         stem.to_string()
     } else {
         name.to_string()
@@ -191,7 +190,7 @@ impl ImageStorage for SmMsStorage {
         );
         body.extend_from_slice(header.as_bytes());
         body.extend_from_slice(data);
-        body.extend_from_slice(format!("\r\n------zdown_boundary_978--\r\n").as_bytes());
+        body.extend_from_slice("\r\n------zdown_boundary_978--\r\n".as_bytes());
 
         let content_type = format!("multipart/form-data; boundary={boundary}");
 
@@ -210,8 +209,8 @@ impl ImageStorage for SmMsStorage {
             .into_string()
             .map_err(|e| format!("读取响应失败: {e}"))?;
 
-        let json: serde_json::Value = serde_json::from_str(&body_text)
-            .map_err(|e| format!("解析响应失败: {e}"))?;
+        let json: serde_json::Value =
+            serde_json::from_str(&body_text).map_err(|e| format!("解析响应失败: {e}"))?;
 
         if json["success"].as_bool() == Some(true) {
             json["data"]["url"]
@@ -224,9 +223,7 @@ impl ImageStorage for SmMsStorage {
                 .map(|s| s.to_string())
                 .ok_or_else(|| "SM.MS 重复图片返回缺少 URL".to_string())
         } else {
-            let msg = json["message"]
-                .as_str()
-                .unwrap_or("未知错误");
+            let msg = json["message"].as_str().unwrap_or("未知错误");
             Err(format!("SM.MS 上传失败: {msg}"))
         }
     }
@@ -308,7 +305,9 @@ mod tests {
     fn base64_storage_returns_data_uri() {
         let storage = Base64Storage;
         let data = vec![0x89, 0x50, 0x4E, 0x47];
-        let url = storage.store(&data, "test.png", ImageFormat::Png).expect("store");
+        let url = storage
+            .store(&data, "test.png", ImageFormat::Png)
+            .expect("store");
         assert!(url.starts_with("data:image/png;base64,"));
     }
 
@@ -321,7 +320,9 @@ mod tests {
             working_dir: Some(tmp.clone()),
         };
         let data = b"fake png data";
-        let url = storage.store(data, "icon.png", ImageFormat::Png).expect("store");
+        let url = storage
+            .store(data, "icon.png", ImageFormat::Png)
+            .expect("store");
         assert!(url.starts_with("images/"));
         assert!(url.ends_with(".png"));
         let file_path = tmp.join(&url);
@@ -338,8 +339,12 @@ mod tests {
             working_dir: Some(tmp.clone()),
         };
         let data = b"data1";
-        let url1 = storage.store(data, "pic.png", ImageFormat::Png).expect("store1");
-        let url2 = storage.store(data, "pic.png", ImageFormat::Png).expect("store2");
+        let url1 = storage
+            .store(data, "pic.png", ImageFormat::Png)
+            .expect("store1");
+        let url2 = storage
+            .store(data, "pic.png", ImageFormat::Png)
+            .expect("store2");
         assert_ne!(url1, url2, "dedup should create different filenames");
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -357,7 +362,9 @@ mod tests {
         let mut config = ImageHostingConfig::default();
         config.default_strategy = ImageStrategy::Base64;
         let storage = create_storage(&config, None);
-        let url = storage.store(b"data", "x.png", ImageFormat::Png).expect("store");
+        let url = storage
+            .store(b"data", "x.png", ImageFormat::Png)
+            .expect("store");
         assert!(url.starts_with("data:image/png;base64,"));
     }
 }

@@ -1,6 +1,5 @@
 //! 预览模式视图：AST → egui 渲染。
 
-use config;
 use eframe::egui;
 use markdown_renderer::RenderCache;
 
