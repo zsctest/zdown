@@ -95,7 +95,8 @@ pub fn show_menu(
                 ui.separator();
 
                 if ui.button("设置...").clicked() {
-                    settings_dialog.open_dialog(app_config.custom_css.as_deref());
+                    settings_dialog
+                        .open_dialog(app_config.custom_css.as_deref(), &app_config.image_hosting);
                     ui.close();
                 }
 
@@ -119,7 +120,7 @@ pub fn show_menu(
                 }
                 ui.separator();
                 if ui.button("插入图片... (Ctrl+I)").clicked() {
-                    trigger_browse_image(state, image_hosting);
+                    trigger_browse_image(state, &app_config.image_hosting);
                     ui.close();
                 }
             });
