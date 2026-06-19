@@ -16,3 +16,4 @@ thiserror.workspace = true
 genpdf.workspace = true
 font-kit.workspace = true
 document_model.workspace = true
+syntect = { workspace = true, features = ["default-syntaxes", "default-themes"] }
