@@ -18,6 +18,14 @@ pub enum Error {
     NoConfigDir,
 }
 
+/// 主题模式。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub enum ThemeMode {
+    #[default]
+    Dark,
+    Light,
+}
+
 /// zdown 应用配置。
 ///
 /// `#[serde(default)]` 确保向后兼容：旧版本配置文件
@@ -28,6 +36,9 @@ pub struct AppConfig {
     /// 自定义 CSS，追加到 HTML 导出的内置样式之后。
     /// `None` 表示不添加自定义样式。
     pub custom_css: Option<String>,
+
+    /// UI 主题：暗色或亮色。默认暗色。
+    pub theme: ThemeMode,
 }
 
 impl AppConfig {
@@ -102,6 +113,7 @@ mod tests {
 
         let config = AppConfig {
             custom_css: Some("body { color: red; }".into()),
+            ..Default::default()
         };
         config.save_to(&path).expect("save_to");
         let loaded = AppConfig::load_from(&path).expect("load_from");
@@ -146,6 +158,7 @@ mod tests {
     fn serialize_produces_valid_toml() {
         let config = AppConfig {
             custom_css: Some("h1 { font-size: 2em; }".into()),
+            ..Default::default()
         };
         let toml_str = toml::to_string_pretty(&config).expect("serialize");
         let parsed: AppConfig = toml::from_str(&toml_str).expect("deserialize");
@@ -161,5 +174,49 @@ mod tests {
     fn error_display() {
         let e = Error::NoConfigDir;
         assert!(e.to_string().contains("配置目录"));
+    }
+
+    #[test]
+    fn theme_mode_default_is_dark() {
+        assert!(matches!(ThemeMode::default(), ThemeMode::Dark));
+    }
+
+    #[test]
+    fn theme_mode_roundtrip() {
+        let path = temp_path("theme");
+        cleanup(&path);
+
+        let config = AppConfig {
+            custom_css: None,
+            theme: ThemeMode::Light,
+        };
+        config.save_to(&path).expect("save");
+        let loaded = AppConfig::load_from(&path).expect("load");
+        assert!(matches!(loaded.theme, ThemeMode::Light));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn old_config_without_theme_defaults_to_dark() {
+        let path = temp_path("old_config");
+        cleanup(&path);
+        // 写入一个只有 custom_css 字段的旧格式 TOML
+        std::fs::write(&path, "custom_css = \"h1 { color: red; }\"\n").expect("write");
+        let loaded = AppConfig::load_from(&path).expect("load");
+        // theme 字段不存在 → 使用 serde(default) → ThemeMode::Dark
+        assert!(matches!(loaded.theme, ThemeMode::Dark));
+        assert_eq!(loaded.custom_css.as_deref(), Some("h1 { color: red; }"));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn config_toml_contains_theme_field() {
+        let config = AppConfig {
+            custom_css: None,
+            theme: ThemeMode::Light,
+        };
+        let toml_str = toml::to_string_pretty(&config).expect("serialize");
+        assert!(toml_str.contains("theme"), "TOML 应包含 theme 字段: {}", toml_str);
+        assert!(toml_str.contains("Light"), "TOML 应包含 Light: {}", toml_str);
     }
 }
