@@ -13,6 +13,7 @@ mod source_view;
 mod tab_bar;
 mod view_mode;
 
+use config::ThemeMode;
 use editor_engine::Cursor;
 use editor_state::EditorState;
 use eframe::egui;
@@ -65,10 +66,14 @@ struct ZdownApp {
     settings_dialog: settings_dialog::SettingsDialog,
     /// 查找替换状态。
     search: SearchState,
+    /// 当前主题模式。
+    theme: ThemeMode,
 }
 
 impl Default for ZdownApp {
     fn default() -> Self {
+        let app_config = config::AppConfig::load().unwrap_or_default();
+        let theme = app_config.theme.clone();
         Self {
             state: EditorState::default(),
             confirm: ConfirmDialog::default(),
@@ -77,9 +82,10 @@ impl Default for ZdownApp {
             highlighter: markdown_renderer::SourceHighlighter::new().ok(),
             render_cache: markdown_renderer::RenderCache::new(),
             fold_state: outline_view::OutlineFoldState::default(),
-            app_config: config::AppConfig::load().unwrap_or_default(),
+            app_config,
             settings_dialog: settings_dialog::SettingsDialog::default(),
             search: SearchState::default(),
+            theme,
         }
     }
 }
@@ -88,6 +94,14 @@ impl eframe::App for ZdownApp {
     #[allow(deprecated)]
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+
+        // 应用当前主题到 egui
+        match self.theme {
+            ThemeMode::Dark => ctx.set_visuals(egui::Visuals::dark()),
+            ThemeMode::Light => ctx.set_visuals(egui::Visuals::light()),
+        }
+
+        let theme_before = self.theme.clone();
         menu::show_menu(
             ui,
             &mut self.state,
@@ -95,7 +109,28 @@ impl eframe::App for ZdownApp {
             &mut self.view_mode,
             &mut self.settings_dialog,
             &self.app_config,
+            &mut self.theme,
         );
+
+        // 主题切换时重建 highlighter + 保存配置
+        if self.theme != theme_before {
+            let syntax_name = match self.theme {
+                ThemeMode::Dark => "base16-ocean.dark",
+                ThemeMode::Light => "InspiredGitHub",
+            };
+            self.highlighter = markdown_renderer::SourceHighlighter::with_theme(syntax_name)
+                .or_else(|_| {
+                    tracing::warn!("语法主题加载失败: {syntax_name}，使用默认");
+                    markdown_renderer::SourceHighlighter::new()
+                })
+                .ok();
+
+            self.app_config.theme = self.theme.clone();
+            if let Err(e) = self.app_config.save() {
+                tracing::error!("配置保存失败: {e}");
+            }
+        }
+
         menu::handle_shortcuts(&ctx, &mut self.state, &mut self.confirm);
 
         // 搜索快捷键：Esc 关闭、Enter 导航（需在编辑器输入处理之前）

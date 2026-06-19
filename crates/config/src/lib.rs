@@ -19,7 +19,7 @@ pub enum Error {
 }
 
 /// 主题模式。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub enum ThemeMode {
     #[default]
     Dark,
@@ -216,7 +216,15 @@ mod tests {
             theme: ThemeMode::Light,
         };
         let toml_str = toml::to_string_pretty(&config).expect("serialize");
-        assert!(toml_str.contains("theme"), "TOML 应包含 theme 字段: {}", toml_str);
-        assert!(toml_str.contains("Light"), "TOML 应包含 Light: {}", toml_str);
+        assert!(
+            toml_str.contains("theme"),
+            "TOML 应包含 theme 字段: {}",
+            toml_str
+        );
+        assert!(
+            toml_str.contains("Light"),
+            "TOML 应包含 Light: {}",
+            toml_str
+        );
     }
 }
