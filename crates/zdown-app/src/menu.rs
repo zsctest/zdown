@@ -314,6 +314,18 @@ pub fn handle_shortcuts(ctx: &egui::Context, state: &mut EditorState, confirm: &
     if mods.ctrl && mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
         state.prev_tab();
     }
+    // Ctrl+Shift+Left — 左移标签页
+    if mods.ctrl && mods.shift && ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+        let idx = state.active_tab_index();
+        if idx > 0 {
+            state.move_tab(idx, idx - 1);
+        }
+    }
+    // Ctrl+Shift+Right — 右移标签页
+    if mods.ctrl && mods.shift && ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+        let idx = state.active_tab_index();
+        state.move_tab(idx, idx + 1);
+    }
     // Ctrl+Z
     if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Z)) {
         let _ = state.undo();

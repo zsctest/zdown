@@ -117,6 +117,25 @@ impl EditorState {
         true
     }
 
+    /// 移动标签页从 `from` 到 `to` 位置。
+    ///
+    /// 若索引越界或相同，则不执行任何操作。
+    pub fn move_tab(&mut self, from: usize, to: usize) {
+        if from == to || from >= self.tabs.len() || to >= self.tabs.len() {
+            return;
+        }
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(to, tab);
+        // 调整活跃标签页索引
+        if self.active_tab == from {
+            self.active_tab = to;
+        } else if from < self.active_tab && to >= self.active_tab {
+            self.active_tab -= 1;
+        } else if from > self.active_tab && to <= self.active_tab {
+            self.active_tab += 1;
+        }
+    }
+
     /// 指定索引标签页的显示名称。
     pub fn tab_title(&self, index: usize) -> String {
         self.tabs
@@ -712,6 +731,21 @@ mod tests {
         assert_eq!(s.active_tab_index(), 0);
         s.prev_tab();
         assert_eq!(s.active_tab_index(), 2);
+    }
+
+    #[test]
+    fn move_tab_left_and_right() {
+        let mut s = EditorState::new();
+        s.new_file();
+        s.new_file();
+        // tabs: [空, 空1, 空2], active=2
+        s.move_tab(2, 0); // 移动到最前
+        assert_eq!(s.active_tab_index(), 0);
+        assert_eq!(s.tab_count(), 3);
+
+        s.switch_tab(2); // 切到原来的 tab[2]
+        s.move_tab(2, 1); // 左移一位
+        assert_eq!(s.active_tab_index(), 1);
     }
 
     #[test]
