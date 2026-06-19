@@ -8,6 +8,7 @@ mod outline_view;
 mod preview_view;
 mod settings_dialog;
 mod source_view;
+mod tab_bar;
 mod view_mode;
 
 use editor_state::EditorState;
@@ -112,6 +113,11 @@ impl eframe::App for ZdownApp {
             &mut self.app_config,
             &mut self.settings_dialog,
         );
+
+        // 标签栏（多标签页时显示）
+        if self.state.tab_count() > 1 {
+            tab_bar::show_tab_bar(ui, &mut self.state, &mut self.confirm);
+        }
 
         let highlighter = self.highlighter.as_ref();
 

@@ -34,6 +34,14 @@ impl Workspace {
         Ok(())
     }
 
+    /// 保存到指定路径（不更新内部 current_path）。
+    /// 用于多标签页场景，每个标签页独立管理自己的路径。
+    pub fn save_to(&self, path: &Path, doc: &Document) -> Result<()> {
+        let md = to_markdown(doc);
+        fs::write(path, md)?;
+        Ok(())
+    }
+
     /// 另存为指定路径，并更新当前路径。
     pub fn save_as(&mut self, path: &Path, doc: &Document) -> Result<()> {
         let md = to_markdown(doc);
@@ -165,6 +173,18 @@ mod tests {
         ws.save_as(&path, &doc).expect("save_as");
         let reopened = ws.open(&path).expect("reopen");
         assert_eq!(reopened, doc);
+    }
+
+    #[test]
+    fn save_to_writes_file_without_updating_current_path() {
+        let ws = Workspace::new();
+        let doc = sample_doc();
+        let (_f, path) = write_temp("");
+        ws.save_to(&path, &doc).expect("save_to");
+        let content = std::fs::read_to_string(&path).expect("read");
+        assert_eq!(content, "hello\n");
+        // current_path remains None — save_to doesn't change it
+        assert!(ws.current_path().is_none());
     }
 
     #[test]

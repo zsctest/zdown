@@ -780,7 +780,10 @@ dependencies = [
 name = "config"
 version = "0.0.0"
 dependencies = [
+ "dirs 5.0.1",
+ "serde",
  "thiserror 2.0.18",
+ "toml",
 ]
 
 [[package]]
@@ -5662,6 +5665,7 @@ dependencies = [
 name = "zdown-app"
 version = "0.0.0"
 dependencies = [
+ "config",
  "document_model",
  "editor_engine",
  "eframe",

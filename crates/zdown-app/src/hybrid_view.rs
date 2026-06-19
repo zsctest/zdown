@@ -14,21 +14,18 @@ pub fn show_hybrid_view(
     highlighter: Option<&SourceHighlighter>,
     cache: &mut markdown_renderer::RenderCache,
 ) {
-    let src = state.editor.to_string();
-    let cursor_line = state.editor.cursor.line;
+    let src = state.editor().to_string();
+    let cursor_line = state.editor().cursor.line;
 
     // 先处理输入（复用 source_view 的 prev_cursor/next_cursor + 同样的键处理逻辑）
     let ctx = ui.ctx().clone();
-    let input_response = ui.interact(
-        ui.max_rect(),
-        egui::Id::new("hybrid_view_input"),
-        egui::Sense::click_and_drag(),
-    );
+    let focus_id = egui::Id::new(("hybrid_view_input", state.active_tab_index()));
+    let input_response = ui.interact(ui.max_rect(), focus_id, egui::Sense::click_and_drag());
     if input_response.has_focus() {
-        crate::input::handle_input(&ctx, state);
+        crate::input::handle_input(&ctx, state.editor_mut());
     }
     if input_response.clicked() {
-        ctx.memory_mut(|m| m.request_focus(egui::Id::new("hybrid_view_input")));
+        ctx.memory_mut(|m| m.request_focus(focus_id));
     }
 
     let doc = cache.parse_cached(&src);
@@ -56,7 +53,7 @@ pub fn show_hybrid_view(
                     ui,
                     &cursor_block_src,
                     relative_cursor_line,
-                    state.editor.cursor.col,
+                    state.editor().cursor.col,
                     highlighter,
                 );
 

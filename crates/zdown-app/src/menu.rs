@@ -11,9 +11,9 @@ use crate::view_mode::ViewMode;
 /// 待确认的操作类型（用户选 New/Open/Quit 但有未保存修改时）。
 #[derive(Debug, Clone, PartialEq)]
 pub enum PendingAction {
-    New,
-    Open,
     Quit,
+    /// 关闭标签页（带未保存提示）。
+    CloseTab(usize),
 }
 
 /// UI 状态：是否显示未保存确认对话框 + 待确认操作。
@@ -43,21 +43,13 @@ pub fn show_menu(
         egui::menu::bar(ui, |ui| {
             ui.menu_button("文件", |ui| {
                 if ui.button("新建 (Ctrl+N)").clicked() {
-                    if state.is_dirty() {
-                        confirm.pending = Some(PendingAction::New);
-                    } else {
-                        state.new_file();
-                    }
+                    state.new_file();
                 }
                 if ui.button("打开... (Ctrl+O)").clicked() {
-                    if state.is_dirty() {
-                        confirm.pending = Some(PendingAction::Open);
-                    } else {
-                        trigger_open(state);
-                    }
+                    trigger_open(state);
                 }
                 if ui.button("保存 (Ctrl+S)").clicked() {
-                    if state.current_path.is_none() {
+                    if state.current_path().is_none() {
                         trigger_save_as(state);
                     } else {
                         let _ = state.save();
@@ -99,7 +91,7 @@ pub fn show_menu(
                 ui.separator();
 
                 if ui.button("退出").clicked() {
-                    if state.is_dirty() {
+                    if state.any_dirty() {
                         confirm.pending = Some(PendingAction::Quit);
                     } else {
                         state.quit();
@@ -140,10 +132,10 @@ pub fn show_confirm_dialog(
 ) {
     if let Some(pending) = confirm.pending.clone() {
         let title = match &pending {
-            PendingAction::New => "未保存修改 - 新建",
-            PendingAction::Open => "未保存修改 - 打开",
             PendingAction::Quit => "未保存修改 - 退出",
+            PendingAction::CloseTab(_) => "未保存修改 - 关闭标签页",
         };
+        let pending_clone = pending.clone();
         let mut action_taken = None;
         egui::Window::new(title)
             .collapsible(false)
@@ -166,15 +158,15 @@ pub fn show_confirm_dialog(
         if let Some(action) = action_taken {
             match action {
                 "save" => {
-                    if state.current_path.is_some() {
+                    if state.current_path().is_some() {
                         let _ = state.save();
                     } else {
                         trigger_save_as(state);
                     }
-                    execute_pending(state, &pending);
+                    execute_pending(state, &pending_clone);
                 }
                 "discard" => {
-                    execute_pending(state, &pending);
+                    execute_pending(state, &pending_clone);
                 }
                 _ => {}
             }
@@ -185,9 +177,13 @@ pub fn show_confirm_dialog(
 
 fn execute_pending(state: &mut EditorState, pending: &PendingAction) {
     match pending {
-        PendingAction::New => state.new_file(),
-        PendingAction::Open => trigger_open(state),
         PendingAction::Quit => state.quit(),
+        PendingAction::CloseTab(i) => {
+            let removed = state.close_tab(*i);
+            if !removed {
+                state.new_file();
+            }
+        }
     }
 }
 
@@ -233,8 +229,7 @@ fn trigger_export_html(state: &mut EditorState, app_config: &AppConfig) {
         }
         let config = export_engine::HtmlConfig {
             title: state
-                .current_path
-                .as_ref()
+                .current_path()
                 .and_then(|p| p.file_stem())
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default(),
@@ -264,7 +259,7 @@ pub fn handle_shortcuts(ctx: &egui::Context, state: &mut EditorState, confirm: &
 
     // Ctrl+S
     if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::S)) {
-        if state.current_path.is_some() {
+        if state.current_path().is_some() {
             let _ = state.save();
         } else {
             trigger_save_as(state);
@@ -276,19 +271,35 @@ pub fn handle_shortcuts(ctx: &egui::Context, state: &mut EditorState, confirm: &
     }
     // Ctrl+N
     if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::N)) {
-        if state.is_dirty() {
-            confirm.pending = Some(PendingAction::New);
-        } else {
-            state.new_file();
-        }
+        state.new_file();
     }
     // Ctrl+O
     if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::O)) {
-        if state.is_dirty() {
-            confirm.pending = Some(PendingAction::Open);
+        trigger_open(state);
+    }
+    // Ctrl+W — 关闭活跃标签页
+    if mods.ctrl
+        && !mods.shift
+        && ctx.input(|i| i.key_pressed(egui::Key::W))
+        && state.tab_count() > 1
+    {
+        let idx = state.active_tab_index();
+        if state.tab_is_dirty(idx) {
+            confirm.pending = Some(PendingAction::CloseTab(idx));
         } else {
-            trigger_open(state);
+            let removed = state.close_tab(idx);
+            if !removed {
+                state.new_file();
+            }
         }
+    }
+    // Ctrl+Tab — 下一标签页
+    if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
+        state.next_tab();
+    }
+    // Ctrl+Shift+Tab — 上一标签页
+    if mods.ctrl && mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
+        state.prev_tab();
     }
     // Ctrl+Z
     if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Z)) {

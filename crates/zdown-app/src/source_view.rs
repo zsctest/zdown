@@ -19,21 +19,18 @@ pub fn show_source_view(
     state: &mut EditorState,
     highlighter: Option<&SourceHighlighter>,
 ) {
-    let src = state.editor.to_string();
+    let src = state.editor().to_string();
 
     // 先处理输入事件（更新 editor），再渲染（避免一帧延迟）
     let ctx = ui.ctx().clone();
-    let input_response = ui.interact(
-        ui.max_rect(),
-        egui::Id::new("source_view_input"),
-        egui::Sense::click_and_drag(),
-    );
+    let focus_id = egui::Id::new(("source_view_input", state.active_tab_index()));
+    let input_response = ui.interact(ui.max_rect(), focus_id, egui::Sense::click_and_drag());
     if input_response.has_focus() {
-        crate::input::handle_input(&ctx, state);
+        crate::input::handle_input(&ctx, state.editor_mut());
     }
     // 点击获取焦点
     if input_response.clicked() {
-        ctx.memory_mut(|m| m.request_focus(egui::Id::new("source_view_input")));
+        ctx.memory_mut(|m| m.request_focus(focus_id));
     }
 
     egui::ScrollArea::vertical().show(ui, |ui| {
@@ -54,7 +51,7 @@ pub fn show_source_view(
 
             // 高亮文本 + 光标
             ui.vertical(|ui| {
-                render_text_with_cursor(ui, &src, state.editor.cursor, highlighter);
+                render_text_with_cursor(ui, &src, state.editor().cursor, highlighter);
             });
         });
     });

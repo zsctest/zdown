@@ -168,7 +168,7 @@ pub fn show_outline_panel(
 
     // 计算可见性和当前标题索引
     let visible = compute_visibility(&items, &fold_state.collapsed);
-    let cursor_line = state.editor.cursor.line;
+    let cursor_line = state.editor().cursor.line;
     let current_idx = current_heading_index(&items, cursor_line);
 
     egui::ScrollArea::vertical()
@@ -215,7 +215,7 @@ pub fn show_outline_panel(
                     let response = ui.selectable_label(is_current, text);
                     if response.clicked() {
                         let cursor = Cursor::new(item.line, 0);
-                        let _ = state.editor.set_cursor(cursor);
+                        let _ = state.editor_mut().set_cursor(cursor);
                     }
                 });
             }
