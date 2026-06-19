@@ -8,11 +8,13 @@ mod preview_view;
 mod source_view;
 mod view_mode;
 mod search;
+mod search_state;
 
 use editor_state::EditorState;
 use eframe::egui;
 use menu::ConfirmDialog;
 use view_mode::ViewMode;
+use search_state::SearchState;
 
 fn main() -> eframe::Result {
     tracing_subscriber::fmt()
@@ -51,6 +53,8 @@ struct ZdownApp {
     highlighter: Option<markdown_renderer::SourceHighlighter>,
     /// 渲染缓存（LRU 10 条）。
     render_cache: markdown_renderer::RenderCache,
+    /// 查找替换状态。
+    search: SearchState,
 }
 
 impl Default for ZdownApp {
@@ -62,6 +66,7 @@ impl Default for ZdownApp {
             last_title: String::new(),
             highlighter: markdown_renderer::SourceHighlighter::new().ok(),
             render_cache: markdown_renderer::RenderCache::new(),
+            search: SearchState::default(),
         }
     }
 }
