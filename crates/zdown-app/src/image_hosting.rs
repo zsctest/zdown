@@ -256,6 +256,7 @@ pub fn create_storage(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
 
     #[test]
@@ -359,8 +360,10 @@ mod tests {
 
     #[test]
     fn create_storage_base64() {
-        let mut config = ImageHostingConfig::default();
-        config.default_strategy = ImageStrategy::Base64;
+        let config = ImageHostingConfig {
+            default_strategy: ImageStrategy::Base64,
+            ..Default::default()
+        };
         let storage = create_storage(&config, None);
         let url = storage
             .store(b"data", "x.png", ImageFormat::Png)
