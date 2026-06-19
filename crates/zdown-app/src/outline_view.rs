@@ -142,6 +142,26 @@ pub fn compute_visibility(items: &[OutlineItem], collapsed: &BTreeSet<usize>) ->
     visible
 }
 
+/// 自动展开所有隐藏当前标题的折叠祖先。
+///
+/// 从当前标题向前遍历，展开所有层级小于当前标题且被折叠的祖先项，
+/// 确保光标所在章节在大纲中始终可见。
+fn auto_expand_ancestors(
+    items: &[OutlineItem],
+    collapsed: &mut BTreeSet<usize>,
+    target_idx: usize,
+) {
+    let target_level = items[target_idx].level;
+    let mut min_level = target_level;
+    for i in (0..target_idx).rev() {
+        if items[i].level < min_level {
+            // 这是目标标题的一个祖先
+            collapsed.remove(&i);
+            min_level = items[i].level;
+        }
+    }
+}
+
 pub fn show_outline_panel(
     ui: &mut egui::Ui,
     state: &mut EditorState,
@@ -170,6 +190,13 @@ pub fn show_outline_panel(
     let visible = compute_visibility(&items, &fold_state.collapsed);
     let cursor_line = state.editor().cursor.line;
     let current_idx = current_heading_index(&items, cursor_line);
+
+    // 若当前标题被折叠隐藏，自动展开其祖先链
+    if let Some(idx) = current_idx {
+        if !visible[idx] {
+            auto_expand_ancestors(&items, &mut fold_state.collapsed, idx);
+        }
+    }
 
     egui::ScrollArea::vertical()
         .id_salt("outline_scroll")
@@ -563,6 +590,50 @@ mod tests {
         let mut collapsed = BTreeSet::new();
         collapsed.insert(0);
         assert_eq!(compute_visibility(&items, &collapsed), vec![true]);
+    }
+
+    // ---- auto_expand_ancestors ----
+
+    #[test]
+    fn auto_expand_single_ancestor() {
+        // H1 (collapsed), H2, H3 <-- target
+        let items = vec![oi(1, 0), oi(2, 2), oi(3, 4)];
+        let mut collapsed = BTreeSet::new();
+        collapsed.insert(0); // H1 collapsed
+        auto_expand_ancestors(&items, &mut collapsed, 2);
+        assert!(collapsed.is_empty());
+    }
+
+    #[test]
+    fn auto_expand_multi_level_ancestors() {
+        // H1 (collapsed), H2 (collapsed), H3, H4 <-- target
+        let items = vec![oi(1, 0), oi(2, 2), oi(3, 4), oi(4, 6)];
+        let mut collapsed = BTreeSet::new();
+        collapsed.insert(0); // H1
+        collapsed.insert(1); // H2
+        auto_expand_ancestors(&items, &mut collapsed, 3);
+        assert!(collapsed.is_empty());
+    }
+
+    #[test]
+    fn auto_expand_preserves_unrelated_collapse() {
+        // H1, H2 (collapsed), H3 <-- target, H1_b, H2_b (collapsed)
+        let items = vec![oi(1, 0), oi(2, 2), oi(3, 4), oi(1, 6), oi(2, 8)];
+        let mut collapsed = BTreeSet::new();
+        collapsed.insert(1); // first H2
+        collapsed.insert(4); // second H2 (unrelated to target)
+        auto_expand_ancestors(&items, &mut collapsed, 2);
+        assert!(!collapsed.contains(&1)); // expanded
+        assert!(collapsed.contains(&4)); // preserved — unrelated
+    }
+
+    #[test]
+    fn auto_expand_already_visible_does_nothing() {
+        let items = vec![oi(1, 0), oi(2, 2)];
+        let mut collapsed = BTreeSet::new();
+        // nothing collapsed
+        auto_expand_ancestors(&items, &mut collapsed, 1);
+        assert!(collapsed.is_empty());
     }
 
     // ---- compute_outline_fingerprint ----
