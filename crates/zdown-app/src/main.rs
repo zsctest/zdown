@@ -78,8 +78,35 @@ impl eframe::App for ZdownApp {
         menu::show_menu(ui, &mut self.state, &mut self.confirm, &mut self.view_mode);
         menu::handle_shortcuts(&ctx, &mut self.state, &mut self.confirm);
 
+        // 搜索快捷键：Esc 关闭、Enter 导航（需在编辑器输入处理之前）
+        if self.search.visible {
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.search.close();
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                if let Some(m) = self.search.next_match() {
+                    let _ = self
+                        .state
+                        .editor
+                        .set_cursor(Cursor::new(m.line, m.col_start));
+                }
+            }
+        }
+
         // 视图模式快捷键 Ctrl+1/2/3
         let mods = ctx.input(|i| i.modifiers);
+
+        // Ctrl+F 切换搜索栏
+        if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::F)) {
+            self.search.visible = !self.search.visible;
+            if self.search.visible {
+                self.search.focus_search = true;
+                let src = self.state.editor.to_string();
+                self.search.search(&src);
+            } else {
+                self.search.close();
+            }
+        }
         if mods.ctrl && !mods.shift {
             if ctx.input(|i| i.key_pressed(egui::Key::Num1)) {
                 self.view_mode = ViewMode::Source;
@@ -108,7 +135,7 @@ impl eframe::App for ZdownApp {
 
                         // 查找输入框
                         let search_id = egui::Id::new("search_query_input");
-                        let mut search_resp = ui.add(
+                        let search_resp = ui.add(
                             egui::TextEdit::singleline(&mut self.search.query)
                                 .id(search_id)
                                 .desired_width(200.0)
@@ -269,7 +296,8 @@ impl eframe::App for ZdownApp {
                                 });
                             }
                             self.search.close();
-                            tracing::info!("已替换 {count} 处");
+                            let msg = format!("已替换 {count} 处");
+                            tracing::info!("{msg}");
                         }
                     });
                 });
