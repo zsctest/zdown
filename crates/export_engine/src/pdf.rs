@@ -6,8 +6,6 @@ use crate::Result;
 use crate::font::FontSet;
 use crate::theme::{Paper, PdfConfig};
 
-use genpdf::Element;
-
 /// 将 Document 导出为 PDF，返回完整 PDF 字节。
 pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
     let fonts = FontSet::load(config)?;
@@ -30,31 +28,25 @@ pub fn generate_pdf(doc: &Document, config: &PdfConfig) -> Result<Vec<u8>> {
     pdf_doc.set_paper_size(paper_size);
     pdf_doc.set_title("zdown export");
 
-    // 页边距通过 SimplePageDecorator 设置
-    let margins = genpdf::Margins::trbl(
-        config.margins.top,
-        config.margins.right,
-        config.margins.bottom,
-        config.margins.left,
-    );
-    let mut decorator = genpdf::SimplePageDecorator::new();
-    decorator.set_margins(margins);
-    pdf_doc.set_page_decorator(decorator);
+    // 日期格式化（用于页眉页脚 {date} 占位符）
+    let date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let file_name = "untitled.md".to_string();
 
-    // 页眉页脚（genpdf 0.2 支持有限，仅首页展示页码模板）
-    if !config.header_footer.right.is_empty() {
-        let hdr_p = genpdf::elements::Paragraph::new(
-            config
-                .header_footer
-                .right
-                .replace("{page}", "1")
-                .replace("{total}", "1"),
-        )
-        .styled(
-            genpdf::style::Style::new().with_font_size(config.theme.font_size.header_footer as u8),
-        );
-        pdf_doc.push(hdr_p);
-    }
+    let genpdf_margins = genpdf::Margins::trbl(
+        genpdf::Mm::from(config.margins.top),
+        genpdf::Mm::from(config.margins.right),
+        genpdf::Mm::from(config.margins.bottom),
+        genpdf::Mm::from(config.margins.left),
+    );
+
+    let decorator = crate::decorator::ZdownPageDecorator::new(
+        config.header_footer.clone(),
+        genpdf_margins,
+        file_name,
+        date_str,
+        config.theme.font_size.header_footer,
+    );
+    pdf_doc.set_page_decorator(decorator);
 
     let layout = crate::renderer::render_document(doc, config, &fonts)?;
     pdf_doc.push(layout);

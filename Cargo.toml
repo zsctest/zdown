@@ -71,6 +71,7 @@ dirs = "5"
 toml = "0.8"
 
 # ---------- export_engine ----------
+chrono = "0.4"
 genpdf = "0.2"
 font-kit = "0.14"
 

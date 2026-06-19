@@ -1328,6 +1328,7 @@ dependencies = [
 name = "export_engine"
 version = "0.0.0"
 dependencies = [
+ "chrono",
  "document_model",
  "font-kit",
  "genpdf",

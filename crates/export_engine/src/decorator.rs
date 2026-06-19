@@ -2,7 +2,6 @@
 //!
 //! 实现 genpdf::PageDecorator trait，替代 SimplePageDecorator。
 
-use crate::font::FontSet;
 use crate::theme::HeaderFooter;
 
 use genpdf::elements::Paragraph;
@@ -12,8 +11,7 @@ use genpdf::{Alignment, Context, Element, Mm, PageDecorator, Position};
 pub struct ZdownPageDecorator {
     page: usize,
     config: HeaderFooter,
-    #[allow(dead_code)]
-    fonts: FontSet,
+    margins: genpdf::Margins,
     file_name: String,
     date_str: String,
     font_size: u8,
@@ -22,7 +20,7 @@ pub struct ZdownPageDecorator {
 impl ZdownPageDecorator {
     pub fn new(
         config: HeaderFooter,
-        fonts: FontSet,
+        margins: genpdf::Margins,
         file_name: String,
         date_str: String,
         font_size: f32,
@@ -30,7 +28,7 @@ impl ZdownPageDecorator {
         Self {
             page: 0,
             config,
-            fonts,
+            margins,
             file_name,
             date_str,
             font_size: font_size as u8,
@@ -75,14 +73,8 @@ impl PageDecorator for ZdownPageDecorator {
     ) -> Result<genpdf::render::Area<'a>, genpdf::error::Error> {
         self.page += 1;
 
-        // 1. 页边距
-        let margins = genpdf::Margins::trbl(
-            Mm::from(25.4_f32),
-            Mm::from(25.4_f32),
-            Mm::from(25.4_f32),
-            Mm::from(25.4_f32),
-        );
-        area.add_margins(margins);
+        // 1. 页边距（来自配置）
+        area.add_margins(self.margins);
 
         // 2. 页眉
         let header_text = self.build_line();
@@ -123,7 +115,25 @@ impl PageDecorator for ZdownPageDecorator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::PdfConfig;
+
+    fn test_margins() -> genpdf::Margins {
+        genpdf::Margins::trbl(
+            Mm::from(25.4_f32),
+            Mm::from(25.4_f32),
+            Mm::from(25.4_f32),
+            Mm::from(25.4_f32),
+        )
+    }
+
+    fn make_decorator(config: HeaderFooter, file_name: &str, date_str: &str) -> ZdownPageDecorator {
+        ZdownPageDecorator::new(
+            config,
+            test_margins(),
+            file_name.into(),
+            date_str.into(),
+            9.0,
+        )
+    }
 
     #[test]
     fn fill_template_no_placeholders_is_identity() {
@@ -132,12 +142,7 @@ mod tests {
             center: String::new(),
             right: String::new(),
         };
-        let font_config = PdfConfig::minimal();
-        let fonts = match FontSet::load(&font_config) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-        let d = ZdownPageDecorator::new(config, fonts, "test.md".into(), "2026-06-19".into(), 9.0);
+        let d = make_decorator(config, "test.md", "2026-06-19");
         assert_eq!(d.fill_template("hello"), "hello");
         assert_eq!(d.fill_template(""), "");
     }
@@ -149,12 +154,7 @@ mod tests {
             center: String::new(),
             right: String::new(),
         };
-        let font_config = PdfConfig::minimal();
-        let fonts = match FontSet::load(&font_config) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-        let d = ZdownPageDecorator::new(config, fonts, "test.md".into(), "2026-06-19".into(), 9.0);
+        let d = make_decorator(config, "test.md", "2026-06-19");
         assert_eq!(d.fill_template("{total}"), "?");
         assert_eq!(d.fill_template("{page}/{total}"), "0/?");
     }
@@ -166,12 +166,7 @@ mod tests {
             center: "{date}".into(),
             right: "{page}/{total}".into(),
         };
-        let font_config = PdfConfig::minimal();
-        let fonts = match FontSet::load(&font_config) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-        let d = ZdownPageDecorator::new(config, fonts, "mydoc.md".into(), "2026-06-19".into(), 9.0);
+        let d = make_decorator(config, "mydoc.md", "2026-06-19");
         assert_eq!(d.fill_template("{file}"), "mydoc.md");
         assert_eq!(d.fill_template("{date}"), "2026-06-19");
         assert_eq!(d.fill_template("{page}"), "0");
