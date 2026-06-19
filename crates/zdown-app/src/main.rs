@@ -5,16 +5,17 @@ mod hybrid_view;
 mod input;
 mod menu;
 mod preview_view;
-mod source_view;
-mod view_mode;
 mod search;
 mod search_state;
+mod source_view;
+mod view_mode;
 
+use editor_engine::Cursor;
 use editor_state::EditorState;
 use eframe::egui;
 use menu::ConfirmDialog;
-use view_mode::ViewMode;
 use search_state::SearchState;
+use view_mode::ViewMode;
 
 fn main() -> eframe::Result {
     tracing_subscriber::fmt()
@@ -96,9 +97,190 @@ impl eframe::App for ZdownApp {
 
         let highlighter = self.highlighter.as_ref();
 
+        // ===== 搜索栏（Ctrl+F 激活） =====
+        if self.search.visible {
+            egui::Frame::group(ui.style())
+                .inner_margin(egui::Margin::symmetric(4, 2))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        // 查找标签
+                        ui.label(egui::RichText::new("查找:").size(13.0));
+
+                        // 查找输入框
+                        let search_id = egui::Id::new("search_query_input");
+                        let mut search_resp = ui.add(
+                            egui::TextEdit::singleline(&mut self.search.query)
+                                .id(search_id)
+                                .desired_width(200.0)
+                                .font(egui::TextStyle::Monospace),
+                        );
+
+                        // 焦点请求
+                        let ctx_for_focus = ui.ctx().clone();
+                        if self.search.focus_search {
+                            ctx_for_focus.memory_mut(|m| m.request_focus(search_id));
+                            self.search.focus_search = false;
+                        }
+
+                        // 查询变化时重新搜索
+                        if search_resp.changed() {
+                            let src = self.state.editor.to_string();
+                            self.search.search(&src);
+                            // 光标跳到当前匹配
+                            if let Some(m) = self.search.current_match_pos() {
+                                let _ = self
+                                    .state
+                                    .editor
+                                    .set_cursor(Cursor::new(m.line, m.col_start));
+                            }
+                        }
+
+                        // 匹配计数
+                        let count_str = match self.search.current_match {
+                            Some(idx) => {
+                                format!("{}/{}", idx + 1, self.search.matches.len())
+                            }
+                            None => "0/0".to_string(),
+                        };
+                        ui.label(egui::RichText::new(count_str).size(12.0).weak());
+
+                        ui.separator();
+
+                        // 区分大小写按钮
+                        let case_text = if self.search.case_sensitive {
+                            egui::RichText::new("Aa").size(12.0).strong()
+                        } else {
+                            egui::RichText::new("Aa").size(12.0).weak()
+                        };
+                        if ui
+                            .add(egui::Button::new(case_text).min_size(egui::vec2(24.0, 16.0)))
+                            .clicked()
+                        {
+                            self.search.case_sensitive = !self.search.case_sensitive;
+                            let src = self.state.editor.to_string();
+                            self.search.search(&src);
+                        }
+
+                        // 全词匹配按钮
+                        let word_text = if self.search.whole_word {
+                            egui::RichText::new("ab|").size(12.0).strong()
+                        } else {
+                            egui::RichText::new("ab|").size(12.0).weak()
+                        };
+                        if ui
+                            .add(egui::Button::new(word_text).min_size(egui::vec2(24.0, 16.0)))
+                            .clicked()
+                        {
+                            self.search.whole_word = !self.search.whole_word;
+                            let src = self.state.editor.to_string();
+                            self.search.search(&src);
+                        }
+
+                        // 上/下一个匹配按钮
+                        if ui
+                            .add(egui::Button::new("\u{2190}").min_size(egui::vec2(20.0, 16.0)))
+                            .clicked()
+                        {
+                            if let Some(m) = self.search.prev_match() {
+                                let _ = self
+                                    .state
+                                    .editor
+                                    .set_cursor(Cursor::new(m.line, m.col_start));
+                            }
+                        }
+                        if ui
+                            .add(egui::Button::new("\u{2192}").min_size(egui::vec2(20.0, 16.0)))
+                            .clicked()
+                        {
+                            if let Some(m) = self.search.next_match() {
+                                let _ = self
+                                    .state
+                                    .editor
+                                    .set_cursor(Cursor::new(m.line, m.col_start));
+                            }
+                        }
+
+                        // 关闭按钮
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new("\u{2715}").color(egui::Color32::RED),
+                                )
+                                .min_size(egui::vec2(20.0, 16.0)),
+                            )
+                            .clicked()
+                        {
+                            self.search.close();
+                        }
+                    });
+
+                    // 替换行
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("替换:").size(13.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.search.replace)
+                                .desired_width(200.0)
+                                .font(egui::TextStyle::Monospace),
+                        );
+
+                        if ui
+                            .add(egui::Button::new("替换").min_size(egui::vec2(48.0, 16.0)))
+                            .clicked()
+                        {
+                            if let Some(m) = self.search.current_match_pos().cloned() {
+                                let range = editor_engine::Selection::new(
+                                    Cursor::new(m.line, m.col_start),
+                                    Cursor::new(m.line, m.col_end),
+                                );
+                                let replace_text = self.search.replace.clone();
+                                let _ = self.state.editor.apply(editor_engine::Command::Replace {
+                                    range,
+                                    text: replace_text,
+                                });
+                                let src = self.state.editor.to_string();
+                                self.search.search(&src);
+                                if let Some(next) = self.search.current_match_pos().cloned() {
+                                    let _ = self
+                                        .state
+                                        .editor
+                                        .set_cursor(Cursor::new(next.line, next.col_start));
+                                }
+                            }
+                        }
+
+                        if ui
+                            .add(egui::Button::new("全部").min_size(egui::vec2(48.0, 16.0)))
+                            .clicked()
+                        {
+                            let count = self.search.matches.len();
+                            let mut sorted_matches = self.search.matches.clone();
+                            sorted_matches.sort_by(|a, b| {
+                                b.line.cmp(&a.line).then(b.col_start.cmp(&a.col_start))
+                            });
+                            let replace_text = self.search.replace.clone();
+                            for m in &sorted_matches {
+                                let range = editor_engine::Selection::new(
+                                    Cursor::new(m.line, m.col_start),
+                                    Cursor::new(m.line, m.col_end),
+                                );
+                                let _ = self.state.editor.apply(editor_engine::Command::Replace {
+                                    range,
+                                    text: replace_text.clone(),
+                                });
+                            }
+                            self.search.close();
+                            tracing::info!("已替换 {count} 处");
+                        }
+                    });
+                });
+        }
+        // ===== 搜索栏结束 =====
+
         // 根据视图模式渲染
         match self.view_mode {
-            ViewMode::Source => source_view::show_source_view(ui, &mut self.state, highlighter),
+            ViewMode::Source => {
+                source_view::show_source_view(ui, &mut self.state, highlighter, &self.search)
+            }
             ViewMode::Preview => {
                 preview_view::show_preview_view(ui, &mut self.state, &mut self.render_cache);
             }
