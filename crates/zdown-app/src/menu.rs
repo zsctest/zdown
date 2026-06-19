@@ -2,8 +2,7 @@
 
 use eframe::egui;
 
-use config::AppConfig;
-use config::ThemeMode;
+use config::{AppConfig, ImageHostingConfig, ThemeMode};
 
 use crate::editor_state::EditorState;
 use crate::settings_dialog::SettingsDialog;
@@ -40,6 +39,7 @@ pub fn show_menu(
     settings_dialog: &mut SettingsDialog,
     app_config: &AppConfig,
     theme: &mut ThemeMode,
+    image_hosting: &ImageHostingConfig,
 ) {
     egui::TopBottomPanel::top("menu").show_inside(ui, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -116,6 +116,11 @@ pub fn show_menu(
                 }
                 if ui.button("重做 (Ctrl+Y)").clicked() {
                     let _ = state.redo();
+                }
+                ui.separator();
+                if ui.button("插入图片... (Ctrl+I)").clicked() {
+                    trigger_browse_image(state, image_hosting);
+                    ui.close();
                 }
             });
 
@@ -281,6 +286,51 @@ fn trigger_export_html(state: &mut EditorState, app_config: &AppConfig) {
         }
     }
 }
+
+/// 浏览选择图片文件，按默认策略插入到编辑器。
+pub(crate) fn trigger_browse_image(state: &mut EditorState, config: &ImageHostingConfig) {
+    let path = match workspace::pick_open_image() {
+        Some(p) => p,
+        None => return,
+    };
+
+    let filename = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "image.png".to_string());
+
+    let data = match std::fs::read(&path) {
+        Ok(d) => d,
+        Err(e) => {
+            state.status_message = format!("图片读取失败: {e}");
+            return;
+        }
+    };
+
+    let format = crate::image_hosting::ImageFormat::from_filename(&filename);
+    let working_dir = state
+        .current_path()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let storage = crate::image_hosting::create_storage(config, working_dir);
+
+    match storage.store(&data, &filename, format) {
+        Ok(url) => {
+            let md_text = format!("![{filename}]({url})");
+            let cursor = state.editor().cursor;
+            if state
+                .apply(editor_engine::Command::Insert {
+                    pos: cursor,
+                    text: md_text,
+                })
+                .is_err()
+            {
+                state.status_message = "图片插入失败".to_string();
+            }
+        }
+        Err(e) => {
+            state.status_message = format!("图片存储失败: {e}");
+        }
+    }
 
 /// 处理快捷键。
 pub fn handle_shortcuts(ctx: &egui::Context, state: &mut EditorState, confirm: &mut ConfirmDialog) {

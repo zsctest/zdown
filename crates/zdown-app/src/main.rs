@@ -122,6 +122,7 @@ impl eframe::App for ZdownApp {
             &mut self.settings_dialog,
             &self.app_config,
             &mut self.theme,
+            &self.app_config.image_hosting,
         );
 
         // 主题切换时重建 highlighter + 保存配置
@@ -185,6 +186,11 @@ impl eframe::App for ZdownApp {
                 self.view_mode = ViewMode::Hybrid;
                 tracing::info!("切换到 Hybrid 模式");
             }
+        }
+
+        // Ctrl+I 浏览插入图片
+        if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::I)) {
+            menu::trigger_browse_image(&mut self.state, &self.app_config.image_hosting);
         }
 
         menu::show_confirm_dialog(&ctx, &mut self.state, &mut self.confirm);

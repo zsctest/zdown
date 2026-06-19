@@ -39,6 +39,15 @@ pub fn pick_save_file_html() -> Option<PathBuf> {
         .save_file()
 }
 
+/// 弹出打开图片文件对话框。用户取消或环境不支持时返回 `None`。
+pub fn pick_open_image() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .add_filter("图片", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"])
+        .set_title("选择图片")
+        .pick_file()
+}
+
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
