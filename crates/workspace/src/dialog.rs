@@ -30,6 +30,15 @@ pub fn pick_save_file_pdf() -> Option<PathBuf> {
         .save_file()
 }
 
+/// 弹出 HTML 导出保存对话框。用户取消或环境不支持时返回 `None`。
+pub fn pick_save_file_html() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .add_filter("HTML", &["html", "htm"])
+        .set_title("导出 HTML")
+        .set_file_name("untitled.html")
+        .save_file()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]

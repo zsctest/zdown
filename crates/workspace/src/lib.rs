@@ -8,7 +8,7 @@ pub mod error;
 pub mod recent;
 pub mod workspace;
 
-pub use dialog::{pick_open_file, pick_save_file, pick_save_file_pdf};
+pub use dialog::{pick_open_file, pick_save_file, pick_save_file_html, pick_save_file_pdf};
 pub use error::Error;
 pub use recent::RecentFiles;
 pub use workspace::Workspace;

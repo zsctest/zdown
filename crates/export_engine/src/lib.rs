@@ -4,12 +4,14 @@ pub mod decorator;
 pub mod error;
 pub mod font;
 pub mod highlight;
+pub mod html;
 pub mod image_loader;
 pub mod pdf;
 pub mod renderer;
 pub mod theme;
 
 pub use error::Error;
+pub use html::{HtmlConfig, generate_html};
 pub use pdf::generate_pdf;
 pub use theme::PdfConfig;
 

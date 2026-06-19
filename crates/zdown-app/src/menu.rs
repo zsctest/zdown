@@ -64,6 +64,9 @@ pub fn show_menu(
                 if ui.button("导出 PDF...").clicked() {
                     trigger_export_pdf(state);
                 }
+                if ui.button("导出 HTML...").clicked() {
+                    trigger_export_html(state);
+                }
 
                 ui.separator();
 
@@ -206,6 +209,37 @@ fn trigger_export_pdf(state: &mut EditorState) {
             }
             Err(e) => {
                 tracing::error!("PDF 生成失败: {e}");
+            }
+        }
+    }
+}
+
+fn trigger_export_html(state: &mut EditorState) {
+    if let Some(mut path) = workspace::pick_save_file_html() {
+        if path.extension().is_none_or(|e| e != "html" && e != "htm") {
+            path.set_extension("html");
+        }
+        let config = export_engine::HtmlConfig {
+            title: state
+                .current_path
+                .as_ref()
+                .and_then(|p| p.file_stem())
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            ..Default::default()
+        };
+        let doc = state.current_doc();
+        match export_engine::generate_html(&doc, &config) {
+            Ok(html_str) => {
+                if let Err(e) = std::fs::write(&path, &html_str) {
+                    tracing::error!("HTML 写入失败: {e}");
+                } else {
+                    tracing::info!("HTML 导出成功: {}", path.display());
+                    state.recent.add(path);
+                }
+            }
+            Err(e) => {
+                tracing::error!("HTML 生成失败: {e}");
             }
         }
     }
