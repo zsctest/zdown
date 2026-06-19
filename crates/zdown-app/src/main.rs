@@ -4,6 +4,7 @@ mod editor_state;
 mod hybrid_view;
 mod input;
 mod menu;
+mod outline_view;
 mod preview_view;
 mod source_view;
 mod view_mode;
@@ -66,6 +67,7 @@ impl Default for ZdownApp {
 }
 
 impl eframe::App for ZdownApp {
+    #[allow(deprecated)]
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         menu::show_menu(ui, &mut self.state, &mut self.confirm, &mut self.view_mode);
@@ -90,21 +92,32 @@ impl eframe::App for ZdownApp {
 
         let highlighter = self.highlighter.as_ref();
 
-        // 根据视图模式渲染
-        match self.view_mode {
-            ViewMode::Source => source_view::show_source_view(ui, &mut self.state, highlighter),
-            ViewMode::Preview => {
-                preview_view::show_preview_view(ui, &mut self.state, &mut self.render_cache);
+        // 大纲侧边栏 + 中央视图区域
+        egui::SidePanel::left("outline_panel")
+            .resizable(true)
+            .default_width(200.0)
+            .min_width(60.0)
+            .show_inside(ui, |ui| {
+                outline_view::show_outline_panel(ui, &mut self.state);
+            });
+
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            // 根据视图模式渲染
+            match self.view_mode {
+                ViewMode::Source => source_view::show_source_view(ui, &mut self.state, highlighter),
+                ViewMode::Preview => {
+                    preview_view::show_preview_view(ui, &mut self.state, &mut self.render_cache);
+                }
+                ViewMode::Hybrid => {
+                    hybrid_view::show_hybrid_view(
+                        ui,
+                        &mut self.state,
+                        highlighter,
+                        &mut self.render_cache,
+                    );
+                }
             }
-            ViewMode::Hybrid => {
-                hybrid_view::show_hybrid_view(
-                    ui,
-                    &mut self.state,
-                    highlighter,
-                    &mut self.render_cache,
-                );
-            }
-        }
+        });
 
         if self.state.should_exit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
