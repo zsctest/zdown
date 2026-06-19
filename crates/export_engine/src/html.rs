@@ -34,7 +34,9 @@ pub struct HtmlConfig {
     pub title: String,
     /// syntect theme name for code highlighting (default `"InspiredGitHub"`).
     pub syntax_theme: String,
-    /// User-provided CSS override. When `None`, built-in default CSS is used.
+    /// User-provided CSS appended after built-in styles.
+    /// When `None`, only built-in CSS is used.
+    /// When `Some(s)`, `s` is appended so cascade rules apply.
     pub css: Option<String>,
 }
 
@@ -350,7 +352,11 @@ fn render_table(out: &mut String, t: &Table) {
 /// 生成的 HTML 自包含：内嵌默认 CSS 和语法高亮 inline style。
 pub fn generate_html(doc: &Document, config: &HtmlConfig) -> Result<String> {
     let title = escape_html(&config.title);
-    let css = config.css.as_deref().unwrap_or(BUILTIN_CSS);
+    let mut css = BUILTIN_CSS.to_string();
+    if let Some(custom) = &config.css {
+        css.push_str("\n/* === 用户自定义样式 === */\n");
+        css.push_str(custom);
+    }
     let body = render_body(doc);
 
     let html = format!(
@@ -736,7 +742,9 @@ mod tests {
         };
         let html = generate_html(&doc, &config).expect("generate_html");
         assert!(html.contains("body{color:red}"));
-        assert!(!html.contains(BUILTIN_CSS));
+        // 自定义 CSS 是追加而非替换：内置样式仍然存在
+        assert!(html.contains("font-family:"));
+        assert!(html.contains("用户自定义样式"));
     }
 
     #[test]

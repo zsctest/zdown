@@ -18,6 +18,7 @@ workspace.workspace = true
 document_model.workspace = true
 markdown_renderer.workspace = true
 export_engine.workspace = true
+config.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

@@ -6,6 +6,7 @@ mod input;
 mod menu;
 mod outline_view;
 mod preview_view;
+mod settings_dialog;
 mod source_view;
 mod view_mode;
 
@@ -53,6 +54,10 @@ struct ZdownApp {
     render_cache: markdown_renderer::RenderCache,
     /// 大纲面板折叠状态。
     fold_state: outline_view::OutlineFoldState,
+    /// 应用配置（持久化用户设置）。
+    app_config: config::AppConfig,
+    /// 设置对话框状态。
+    settings_dialog: settings_dialog::SettingsDialog,
 }
 
 impl Default for ZdownApp {
@@ -65,6 +70,8 @@ impl Default for ZdownApp {
             highlighter: markdown_renderer::SourceHighlighter::new().ok(),
             render_cache: markdown_renderer::RenderCache::new(),
             fold_state: outline_view::OutlineFoldState::default(),
+            app_config: config::AppConfig::load().unwrap_or_default(),
+            settings_dialog: settings_dialog::SettingsDialog::default(),
         }
     }
 }
@@ -73,7 +80,14 @@ impl eframe::App for ZdownApp {
     #[allow(deprecated)]
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        menu::show_menu(ui, &mut self.state, &mut self.confirm, &mut self.view_mode);
+        menu::show_menu(
+            ui,
+            &mut self.state,
+            &mut self.confirm,
+            &mut self.view_mode,
+            &mut self.settings_dialog,
+            &self.app_config,
+        );
         menu::handle_shortcuts(&ctx, &mut self.state, &mut self.confirm);
 
         // 视图模式快捷键 Ctrl+1/2/3
@@ -92,6 +106,12 @@ impl eframe::App for ZdownApp {
         }
 
         menu::show_confirm_dialog(&ctx, &mut self.state, &mut self.confirm);
+
+        settings_dialog::show_settings_dialog(
+            &ctx,
+            &mut self.app_config,
+            &mut self.settings_dialog,
+        );
 
         let highlighter = self.highlighter.as_ref();
 

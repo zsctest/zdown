@@ -2,7 +2,10 @@
 
 use eframe::egui;
 
+use config::AppConfig;
+
 use crate::editor_state::EditorState;
+use crate::settings_dialog::SettingsDialog;
 use crate::view_mode::ViewMode;
 
 /// 待确认的操作类型（用户选 New/Open/Quit 但有未保存修改时）。
@@ -33,6 +36,8 @@ pub fn show_menu(
     state: &mut EditorState,
     confirm: &mut ConfirmDialog,
     view_mode: &mut ViewMode,
+    settings_dialog: &mut SettingsDialog,
+    app_config: &AppConfig,
 ) {
     egui::TopBottomPanel::top("menu").show_inside(ui, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -65,7 +70,7 @@ pub fn show_menu(
                     trigger_export_pdf(state);
                 }
                 if ui.button("导出 HTML...").clicked() {
-                    trigger_export_html(state);
+                    trigger_export_html(state, app_config);
                 }
 
                 ui.separator();
@@ -83,6 +88,13 @@ pub fn show_menu(
                         }
                     }
                 });
+
+                ui.separator();
+
+                if ui.button("设置...").clicked() {
+                    settings_dialog.open_dialog(app_config.custom_css.as_deref());
+                    ui.close();
+                }
 
                 ui.separator();
 
@@ -214,7 +226,7 @@ fn trigger_export_pdf(state: &mut EditorState) {
     }
 }
 
-fn trigger_export_html(state: &mut EditorState) {
+fn trigger_export_html(state: &mut EditorState, app_config: &AppConfig) {
     if let Some(mut path) = workspace::pick_save_file_html() {
         if path.extension().is_none_or(|e| e != "html" && e != "htm") {
             path.set_extension("html");
@@ -226,6 +238,7 @@ fn trigger_export_html(state: &mut EditorState) {
                 .and_then(|p| p.file_stem())
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default(),
+            css: app_config.custom_css.clone(),
             ..Default::default()
         };
         let doc = state.current_doc();
