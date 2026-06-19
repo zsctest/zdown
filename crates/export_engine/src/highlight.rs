@@ -80,6 +80,7 @@ fn map_style(syn: &syntect::highlighting::Style) -> genpdf::style::Style {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

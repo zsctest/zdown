@@ -121,10 +121,7 @@ fn render_code_block(cb: &CodeBlock, theme: &PdfTheme, layout: &mut LinearLayout
     let highlighter = crate::highlight::CodeHighlighter::new(&theme.syntax_theme);
     let highlighted = highlighter
         .as_ref()
-        .and_then(|h| {
-            let lang = cb.language.as_deref();
-            Some(h.highlight(&cb.content, lang))
-        });
+        .map(|h| h.highlight(&cb.content, cb.language.as_deref()));
 
     if let Some(lines) = highlighted {
         // 高亮版本：逐行逐 token 渲染
