@@ -7,6 +7,7 @@
 //! - 事件转 editor_engine::Command（Insert/Delete）推入历史
 //! - ui.painter 绘制光标矩形（精确像素定位）
 
+use config;
 use eframe::egui;
 use markdown_renderer::SourceHighlighter;
 
@@ -20,7 +21,11 @@ pub fn show_source_view(
     state: &mut EditorState,
     highlighter: Option<&SourceHighlighter>,
     search: &SearchState,
+    app_config: &config::ImageHostingConfig,
 ) {
+    let working_dir = state.current_path().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    crate::input::handle_dropped_images(ui.ctx(), state.editor_mut(), app_config, working_dir);
+
     let src = state.editor().to_string();
 
     // 先处理输入事件（更新 editor），再渲染（避免一帧延迟）

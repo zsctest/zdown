@@ -2,6 +2,7 @@
 //!
 //! 用 BlockWithSpan 的 span 查找光标所在 block，避免按行切割破坏多行结构。
 
+use config;
 use eframe::egui;
 use markdown_renderer::SourceHighlighter;
 
@@ -13,10 +14,13 @@ pub fn show_hybrid_view(
     state: &mut EditorState,
     highlighter: Option<&SourceHighlighter>,
     cache: &mut markdown_renderer::RenderCache,
+    app_config: &config::ImageHostingConfig,
 ) {
+    let working_dir = state.current_path().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    crate::input::handle_dropped_images(ui.ctx(), state.editor_mut(), app_config, working_dir);
+
     let src = state.editor().to_string();
     let cursor_line = state.editor().cursor.line;
-
     // 先处理输入（复用 source_view 的 prev_cursor/next_cursor + 同样的键处理逻辑）
     let ctx = ui.ctx().clone();
     let focus_id = egui::Id::new(("hybrid_view_input", state.active_tab_index()));

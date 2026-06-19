@@ -2,7 +2,8 @@
 //!
 //! 被 source_view 和 hybrid_view 共用。
 
-use editor_engine::{Command, Cursor};
+use config;
+use editor_engine::{Command, Cursor, Editor};
 use eframe::egui;
 
 use editor_engine::Editor;
@@ -145,4 +146,66 @@ pub(crate) fn next_cursor(buffer: &editor_engine::Buffer, cursor: Cursor) -> Opt
             None
         }
     }
+}
+
+/// 处理拖拽的图片文件，插入到编辑器。
+/// 返回实际插入的图片数量。
+pub(crate) fn handle_dropped_images(
+    ctx: &egui::Context,
+    editor: &mut Editor,
+    config: &config::ImageHostingConfig,
+    working_dir: Option<std::path::PathBuf>,
+) -> usize {
+    let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+    if dropped.is_empty() {
+        return 0;
+    }
+
+    let storage = crate::image_hosting::create_storage(config, working_dir);
+    let mut inserted = 0;
+
+    for file in &dropped {
+        let mime = file.mime.to_lowercase();
+        if !mime.starts_with("image/") {
+            continue;
+        }
+        let data = match &file.bytes {
+            Some(b) => b.to_vec(),
+            None => {
+                match &file.path {
+                    Some(p) => match std::fs::read(p) {
+                        Ok(b) => b,
+                        Err(_) => continue,
+                    },
+                    None => continue,
+                }
+            }
+        };
+        let name = file
+            .path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| file.name.clone());
+
+        let format = crate::image_hosting::ImageFormat::from_filename(&name);
+
+        match storage.store(&data, &name, format) {
+            Ok(url) => {
+                let md_text = if inserted == 0 {
+                    format!("![{name}]({url})")
+                } else {
+                    format!("\n![{name}]({url})")
+                };
+                let cursor = editor.cursor;
+                let _ = editor.apply(Command::Insert { pos: cursor, text: md_text });
+                inserted += 1;
+            }
+            Err(_) => {
+                // 跳过失败的图片，继续处理下一个
+            }
+        }
+    }
+
+    inserted
 }

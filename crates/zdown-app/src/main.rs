@@ -421,10 +421,10 @@ impl eframe::App for ZdownApp {
             // 根据视图模式渲染
             match self.view_mode {
                 ViewMode::Source => {
-                    source_view::show_source_view(ui, &mut self.state, highlighter, &self.search);
+                    source_view::show_source_view(ui, &mut self.state, highlighter, &self.search, &self.app_config.image_hosting);
                 }
                 ViewMode::Preview => {
-                    preview_view::show_preview_view(ui, &mut self.state, &mut self.render_cache);
+                    preview_view::show_preview_view(ui, &mut self.state, &mut self.render_cache, &self.app_config.image_hosting);
                 }
                 ViewMode::Hybrid => {
                     hybrid_view::show_hybrid_view(
@@ -432,6 +432,7 @@ impl eframe::App for ZdownApp {
                         &mut self.state,
                         highlighter,
                         &mut self.render_cache,
+                        &self.app_config.image_hosting,
                     );
                 }
             }
