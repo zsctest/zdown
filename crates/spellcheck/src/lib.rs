@@ -40,16 +40,9 @@ impl SpellChecker {
 }
 
 /// 拼写检查错误类型。
-#[derive(Debug)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum SpellcheckError {
     /// 词典解析失败。
+    #[error("词典解析失败: {0}")]
     Parse(String),
-}
-
-impl std::fmt::Display for SpellcheckError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SpellcheckError::Parse(msg) => write!(f, "词典解析失败: {msg}"),
-        }
-    }
 }
