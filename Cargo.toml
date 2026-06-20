@@ -13,6 +13,7 @@ members = [
     "crates/workspace",
     "crates/config",
     "crates/mermaid_renderer",
+    "crates/spellcheck",
     "crates/zdown-app",
 ]
 
@@ -87,6 +88,9 @@ export_engine = { path = "crates/export_engine" }
 workspace = { path = "crates/workspace" }
 config = { path = "crates/config" }
 
+# ---------- spellcheck ----------
+spellbook = "0.4"
+
 # ---------- mermaid_renderer ----------
 flate2 = "1"
 sha2 = "0.10"
@@ -94,6 +98,7 @@ lru = "0.14"
 resvg = "0.46"
 tiny-skia = "0.11"
 mermaid_renderer = { path = "crates/mermaid_renderer" }
+spellcheck = { path = "crates/spellcheck" }
 
 [profile.release]
 lto = true
