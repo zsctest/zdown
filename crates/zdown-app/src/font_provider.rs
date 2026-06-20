@@ -109,19 +109,6 @@ impl FontProvider {
         }
     }
 }
-
-/// 将 font-kit FamilyName 转为纯字符串。
-fn family_name_to_string(name: &font_kit::family_name::FamilyName) -> String {
-    match name {
-        font_kit::family_name::FamilyName::Title(s) => s.clone(),
-        font_kit::family_name::FamilyName::Serif => "serif".into(),
-        font_kit::family_name::FamilyName::SansSerif => "sans-serif".into(),
-        font_kit::family_name::FamilyName::Monospace => "monospace".into(),
-        font_kit::family_name::FamilyName::Cursive => "cursive".into(),
-        font_kit::family_name::FamilyName::Fantasy => "fantasy".into(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,11 +133,5 @@ mod tests {
     #[test]
     fn load_font_ttf_invalid_name_returns_none() {
         assert!(FontProvider::load_font_ttf("__nonexistent_font_xyz__").is_none());
-    }
-
-    #[test]
-    fn family_name_to_string_converts() {
-        let name = family_name_to_string(&FamilyName::Title("Test".into()));
-        assert_eq!(name, "Test");
     }
 }
