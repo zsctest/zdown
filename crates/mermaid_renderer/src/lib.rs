@@ -2,6 +2,7 @@
 //!
 //! 将 Mermaid 语法通过 mermaid.ink 云端 API 渲染为 SVG。
 
+pub mod cache;
 pub mod encode;
 
 /// Mermaid 渲染错误。
@@ -18,8 +19,12 @@ pub enum Error {
 /// 渲染结果类型别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
+use std::time::Duration;
+
 /// Mermaid 图表渲染器。
-pub struct MermaidRenderer;
+pub struct MermaidRenderer {
+    cache: cache::SvgCache,
+}
 
 impl Default for MermaidRenderer {
     fn default() -> Self {
@@ -28,9 +33,11 @@ impl Default for MermaidRenderer {
 }
 
 impl MermaidRenderer {
-    /// 创建新渲染器。
+    /// 创建新渲染器（空缓存）。
     pub fn new() -> Self {
-        Self
+        Self {
+            cache: cache::SvgCache::new(50),
+        }
     }
 
     /// 判断 CodeBlock 是否为 mermaid 图表。
@@ -38,10 +45,38 @@ impl MermaidRenderer {
         language.is_some_and(|l| l.eq_ignore_ascii_case("mermaid"))
     }
 
-    /// 渲染 Mermaid 源码为 SVG 字符串（当前为桩实现）。
-    pub fn render(&mut self, _source: &str) -> Result<String> {
-        // 桩实现 — 后续任务会添加完整逻辑
-        Err(Error::Network("renderer not yet connected".into()))
+    /// 渲染 Mermaid 源码为 SVG 字符串。
+    pub fn render(&mut self, source: &str) -> Result<String> {
+        // 先查缓存
+        let hash = cache::hash_source(source);
+        if let Some(svg) = self.cache.get(&hash) {
+            tracing::debug!("mermaid 缓存命中");
+            return Ok(svg);
+        }
+
+        let url = encode::encode_to_url(source);
+        let svg = self.fetch_svg(&url)?;
+
+        self.cache.insert(hash, svg.clone());
+        Ok(svg)
+    }
+
+    fn fetch_svg(&self, url: &str) -> Result<String> {
+        let response = ureq::get(url)
+            .set("User-Agent", "zdown/0.1")
+            .timeout(Duration::from_secs(10))
+            .call()
+            .map_err(|e| Error::Network(e.to_string()))?;
+
+        let body = response
+            .into_string()
+            .map_err(|e| Error::Network(e.to_string()))?;
+
+        if body.trim_start().starts_with("<svg") || body.trim_start().starts_with("<?xml") {
+            Ok(body)
+        } else {
+            Err(Error::Syntax(body))
+        }
     }
 }
 
