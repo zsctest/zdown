@@ -26,6 +26,35 @@ pub enum ThemeMode {
     Light,
 }
 
+/// 编辑器字体配置。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorFontConfig {
+    /// 字体家族名称，如 "Cascadia Code"、"Fira Code"。
+    /// 默认 "monospace" 表示使用系统默认等宽字体。
+    #[serde(default = "default_font_family")]
+    pub family: String,
+    /// 字号（pt），范围 8–32，默认 14.0。
+    #[serde(default = "default_font_size")]
+    pub size: f32,
+}
+
+fn default_font_family() -> String {
+    "monospace".into()
+}
+
+fn default_font_size() -> f32 {
+    14.0
+}
+
+impl Default for EditorFontConfig {
+    fn default() -> Self {
+        Self {
+            family: default_font_family(),
+            size: default_font_size(),
+        }
+    }
+}
+
 /// 图片存储策略。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub enum ImageStrategy {
@@ -80,6 +109,10 @@ pub struct AppConfig {
     pub theme: ThemeMode,
     /// 图片托管配置。
     pub image_hosting: ImageHostingConfig,
+
+    /// 编辑器字体配置。
+    #[serde(default)]
+    pub editor_font: EditorFontConfig,
 }
 
 impl AppConfig {
@@ -297,6 +330,7 @@ mod tests {
                     api_token: "token123".into(),
                 },
             },
+            ..Default::default()
         };
         config.save_to(&path).expect("save");
         let loaded = AppConfig::load_from(&path).expect("load");
@@ -321,5 +355,36 @@ mod tests {
         ));
         assert_eq!(loaded.image_hosting.local_dir, "images");
         cleanup(&path);
+    }
+
+    // ── EditorFontConfig 测试 ──
+
+    #[test]
+    fn editor_font_config_default() {
+        let c = EditorFontConfig::default();
+        assert_eq!(c.family, "monospace");
+        assert!((c.size - 14.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn editor_font_config_roundtrip() {
+        let c = EditorFontConfig {
+            family: "Cascadia Code".into(),
+            size: 16.0,
+        };
+        let toml_str = toml::to_string_pretty(&c).unwrap();
+        let restored: EditorFontConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(restored.family, "Cascadia Code");
+        assert!((restored.size - 16.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn old_config_without_editor_font_defaults() {
+        let old_toml = r#"
+theme = "Light"
+"#;
+        let config: AppConfig = toml::from_str(old_toml).unwrap();
+        assert_eq!(config.editor_font.family, "monospace");
+        assert!((config.editor_font.size - 14.0).abs() < f32::EPSILON);
     }
 }
