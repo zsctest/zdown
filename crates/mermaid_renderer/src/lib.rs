@@ -2,9 +2,6 @@
 //!
 //! 将 Mermaid 语法通过 mermaid.ink 云端 API 渲染为 SVG。
 
-#[allow(unused_imports)]
-use std::time::Duration;
-
 /// Mermaid 渲染错误。
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
