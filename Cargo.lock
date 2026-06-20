@@ -1443,8 +1443,12 @@ dependencies = [
  "font-kit",
  "genpdf",
  "image 0.23.14",
+ "mermaid_renderer",
+ "resvg",
  "syntect",
  "thiserror 2.0.18",
+ "tiny-skia",
+ "tracing",
  "ureq",
 ]
 
