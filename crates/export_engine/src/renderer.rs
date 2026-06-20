@@ -293,6 +293,17 @@ fn render_inline_to_paragraph(
 }
 
 fn render_code_block(cb: &CodeBlock, theme: &PdfTheme, layout: &mut LinearLayout) {
+    use mermaid_renderer::MermaidRenderer;
+
+    // Mermaid 图表：渲染为光栅图像嵌入 PDF
+    if MermaidRenderer::is_mermaid(cb.language.as_deref()) {
+        if let Some(img) = render_mermaid_to_genpdf_image(&cb.content) {
+            layout.push(img.with_alignment(genpdf::Alignment::Center));
+            return;
+        }
+        // 降级：继续走代码高亮路径
+    }
+
     let highlighter = crate::highlight::CodeHighlighter::new(&theme.syntax_theme);
     let highlighted = highlighter
         .as_ref()
@@ -509,6 +520,34 @@ fn inlines_to_richtext_str(inlines: &[Inline]) -> String {
         }
     }
     text
+}
+
+/// 将 Mermaid 源码渲染为 genpdf Image 元素。
+fn render_mermaid_to_genpdf_image(source: &str) -> Option<genpdf::elements::Image> {
+    let mut renderer = mermaid_renderer::MermaidRenderer::new();
+    let svg = match renderer.render(source) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("Mermaid PDF 渲染失败: {e}");
+            return None;
+        }
+    };
+
+    let opt = resvg::usvg::Options::default();
+    let tree = resvg::usvg::Tree::from_str(&svg, &opt).ok()?;
+    let size = tree.size();
+    let pw = (size.width() * 2.0) as u32;
+    let ph = (size.height() * 2.0) as u32;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(pw, ph)?;
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(2.0, 2.0),
+        &mut pixmap.as_mut(),
+    );
+
+    let rgba = pixmap.data().to_vec();
+    let dyn_img = image::RgbaImage::from_raw(pw, ph, rgba)?;
+    genpdf::elements::Image::from_dynamic_image(image::DynamicImage::ImageRgba8(dyn_img)).ok()
 }
 
 #[cfg(test)]

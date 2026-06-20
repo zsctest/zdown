@@ -120,6 +120,29 @@ fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline], font_id: &egui::FontId)
 }
 
 fn render_code_block(ui: &mut egui::Ui, cb: &CodeBlock) {
+    // 检测 Mermaid 图表并渲染为 SVG
+    if mermaid_renderer::MermaidRenderer::is_mermaid(cb.language.as_deref()) {
+        if let Some(image_data) = render_mermaid_to_egui_image(&cb.content) {
+            let name = format!("mermaid_{:016x}", hash_src(&cb.content));
+            let handle = ui
+                .ctx()
+                .load_texture(name, image_data, egui::TextureOptions::default());
+            let texture_size = handle.size_vec2();
+            let available = ui.available_width().min(texture_size.x);
+            let scale = if texture_size.x > 0.0 {
+                available / texture_size.x
+            } else {
+                1.0
+            };
+            let display_size = egui::vec2(available, texture_size.y * scale);
+            ui.add_sized(
+                display_size,
+                egui::Image::from_texture((handle.id(), texture_size)),
+            );
+            return;
+        }
+    }
+
     let highlighter = SourceHighlighter::new().ok();
     if let Some(h) = &highlighter {
         let lines = h.highlight(&cb.content, cb.language.as_deref());
@@ -348,6 +371,44 @@ fn hash_src(src: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     src.hash(&mut hasher);
     hasher.finish()
+}
+
+// ---------------------------------------------------------------------------
+// Mermaid SVG 渲染辅助
+// ---------------------------------------------------------------------------
+
+use std::cell::RefCell;
+
+thread_local! {
+    static MERMAID_RENDERER: RefCell<mermaid_renderer::MermaidRenderer> =
+        RefCell::new(mermaid_renderer::MermaidRenderer::new());
+}
+
+/// 将 Mermaid 源码渲染为 egui ImageData。
+/// 内部调用 MermaidRenderer 获取 SVG，再光栅化为位图。
+fn render_mermaid_to_egui_image(source: &str) -> Option<egui::ImageData> {
+    let svg = MERMAID_RENDERER.with(|r| r.borrow_mut().render(source).ok())?;
+    render_svg_to_image_data(&svg, 1.0)
+}
+
+/// 使用 resvg + tiny-skia 将 SVG 字符串光栅化为 egui ColorImage。
+fn render_svg_to_image_data(svg: &str, scale: f32) -> Option<egui::ImageData> {
+    let options = resvg::usvg::Options::default();
+    let tree = resvg::usvg::Tree::from_str(svg, &options).ok()?;
+    let size = tree.size();
+    let width = (size.width() * scale).ceil() as u32;
+    let height = (size.height() * scale).ceil() as u32;
+    let width = width.max(1);
+    let height = height.max(1);
+
+    let mut pixmap = tiny_skia::Pixmap::new(width, height)?;
+    let transform = tiny_skia::Transform::from_scale(scale, scale);
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    // Pixmap::data() 返回 &[u8]，字节序 RGBA 预乘 alpha
+    let color_image =
+        egui::ColorImage::from_rgba_premultiplied([width as usize, height as usize], pixmap.data());
+    Some(egui::ImageData::Color(std::sync::Arc::new(color_image)))
 }
 
 #[cfg(test)]
