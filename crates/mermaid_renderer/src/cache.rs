@@ -15,8 +15,7 @@ impl SvgCache {
     pub fn new(cap: usize) -> Self {
         Self {
             inner: LruCache::new(
-                std::num::NonZeroUsize::new(cap.max(1))
-                    .unwrap_or(std::num::NonZeroUsize::MIN),
+                std::num::NonZeroUsize::new(cap.max(1)).unwrap_or(std::num::NonZeroUsize::MIN),
             ),
         }
     }
