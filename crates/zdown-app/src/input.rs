@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use editor_engine::{Command, Cursor, Editor};
 use eframe::egui;
 
-use editor_engine::Editor;
+use crate::editor_state::EditorState;
 
 /// 处理输入事件，转为 editor_engine::Command。
 pub(crate) fn handle_input(

@@ -53,7 +53,6 @@ struct ZdownApp {
     state: EditorState,
     confirm: ConfirmDialog,
     view_mode: ViewMode,
-    settings_dialog: SettingsDialog,
     /// 缓存上次窗口标题，避免每帧 send_viewport_cmd。
     last_title: String,
     /// 缓存 SourceHighlighter 避免每帧重建。
@@ -80,7 +79,6 @@ impl Default for ZdownApp {
             state: EditorState::default(),
             confirm: ConfirmDialog::default(),
             view_mode: ViewMode::default(),
-            settings_dialog: SettingsDialog::default(),
             last_title: String::new(),
             highlighter: {
                 let syntax_name = match theme {

@@ -332,6 +332,7 @@ pub(crate) fn trigger_browse_image(state: &mut EditorState, config: &ImageHostin
             state.status_message = format!("图片存储失败: {e}");
         }
     }
+}
 
 /// 处理快捷键。
 pub fn handle_shortcuts(ctx: &egui::Context, state: &mut EditorState, confirm: &mut ConfirmDialog) {
