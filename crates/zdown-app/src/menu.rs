@@ -94,8 +94,11 @@ pub fn show_menu(
                 ui.separator();
 
                 if ui.button("设置...").clicked() {
-                    settings_dialog
-                        .open_dialog(app_config.custom_css.as_deref(), &app_config.image_hosting);
+                    settings_dialog.open_dialog(
+                        app_config.custom_css.as_deref(),
+                        &app_config.image_hosting,
+                        &app_config.editor_font,
+                    );
                     ui.close();
                 }
 

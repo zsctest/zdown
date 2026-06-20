@@ -1,6 +1,7 @@
 //! zdown-app：egui 应用入口（阶段 2）。
 
 mod editor_state;
+mod font_provider;
 mod hybrid_view;
 mod image_hosting;
 mod input;
@@ -12,13 +13,13 @@ mod search_state;
 mod settings_dialog;
 mod source_view;
 mod tab_bar;
-mod font_provider;
 mod view_mode;
 
 use config::ThemeMode;
 use editor_engine::Cursor;
 use editor_state::EditorState;
 use eframe::egui;
+use font_provider::FontProvider;
 use menu::ConfirmDialog;
 use search_state::SearchState;
 use view_mode::ViewMode;
@@ -68,6 +69,8 @@ struct ZdownApp {
     settings_dialog: settings_dialog::SettingsDialog,
     /// 查找替换状态。
     search: SearchState,
+    /// 系统已安装的等宽字体列表（缓存）。
+    available_fonts: Vec<String>,
     /// 当前主题模式。
     theme: ThemeMode,
 }
@@ -97,6 +100,7 @@ impl Default for ZdownApp {
             fold_state: outline_view::OutlineFoldState::default(),
             app_config,
             settings_dialog: settings_dialog::SettingsDialog::default(),
+            available_fonts: FontProvider::list_monospace_families(),
             search: SearchState::default(),
             theme,
         }
@@ -198,6 +202,7 @@ impl eframe::App for ZdownApp {
             &ctx,
             &mut self.app_config,
             &mut self.settings_dialog,
+            &self.available_fonts,
         );
 
         // 标签栏（多标签页时显示）
