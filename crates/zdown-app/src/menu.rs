@@ -39,7 +39,6 @@ pub fn show_menu(
     settings_dialog: &mut SettingsDialog,
     app_config: &AppConfig,
     theme: &mut ThemeMode,
-    image_hosting: &ImageHostingConfig,
 ) {
     egui::TopBottomPanel::top("menu").show_inside(ui, |ui| {
         egui::menu::bar(ui, |ui| {

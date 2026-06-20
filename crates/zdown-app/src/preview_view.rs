@@ -12,7 +12,9 @@ pub fn show_preview_view(
     cache: &mut RenderCache,
     app_config: &config::ImageHostingConfig,
 ) {
-    let working_dir = state.current_path().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let working_dir = state
+        .current_path()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
     crate::input::handle_dropped_images(ui.ctx(), state.editor_mut(), app_config, working_dir);
 
     egui::ScrollArea::vertical().show(ui, |ui| {

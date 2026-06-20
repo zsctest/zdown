@@ -1,0 +1,104 @@
+<h2>主题切换入口放在哪里？</h2>
+<p class="subtitle">用户在哪里切换亮色/暗色主题？</p>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-image">
+      <div class="mockup" style="margin: 0;">
+        <div class="mockup-header">方案 A：视图菜单中</div>
+        <div class="mockup-body">
+          <div style="background: #2d2d2d; padding: 4px 8px; color: #ccc; font-size: 12px;">
+            文件 | 编辑 | <span style="background: #4a9eff; padding: 2px 4px; color: #fff;">视图 ▼</span>
+          </div>
+          <div style="background: #333; border: 1px solid #555; padding: 8px; font-size: 12px; color: #ccc; min-height: 80px;">
+            <div style="padding: 2px 8px;">源码 (Ctrl+1)</div>
+            <div style="padding: 2px 8px;">预览 (Ctrl+2)</div>
+            <div style="padding: 2px 8px;">Hybrid (Ctrl+3)</div>
+            <div style="border-top: 1px solid #555; margin: 4px 0;"></div>
+            <div style="padding: 2px 8px; background: #4a9eff; color: #fff;">☀️ 亮色主题 / 🌙 暗色主题</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>视图菜单</h3>
+      <p>在现有"视图"菜单中添加"亮色/暗色主题"切换项。与源码/预览/Hybrid 模式在同一个菜单。</p>
+      <p style="color: #4a9eff;">✅ 自然的位置，不增加 UI 复杂度</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-image">
+      <div class="mockup" style="margin: 0;">
+        <div class="mockup-header">方案 B：设置对话框中</div>
+        <div class="mockup-body">
+          <div style="background: #2d2d2d; padding: 4px 8px; color: #ccc; font-size: 12px;">
+            文件 | 编辑 | 视图
+          </div>
+          <div style="background: #333; padding: 8px; min-height: 80px;">
+            <div style="background: #3a3a3a; border: 1px solid #5a5a5a; padding: 8px; max-width: 300px; margin: 0 auto;">
+              <div style="font-weight: bold; color: #ccc; font-size: 13px; margin-bottom: 8px;">设置</div>
+              <div style="margin-bottom: 8px;">
+                <div style="color: #aaa; font-size: 11px; margin-bottom: 2px;">主题</div>
+                <div style="display: flex; gap: 4px;">
+                  <button style="background: #4a9eff; color: #fff; border: none; padding: 4px 12px; font-size: 11px;">☀️ 亮色</button>
+                  <button style="background: #555; color: #ccc; border: none; padding: 4px 12px; font-size: 11px;">🌙 暗色</button>
+                </div>
+              </div>
+              <div style="border-top: 1px solid #555; padding-top: 8px;">
+                <div style="color: #aaa; font-size: 11px;">自定义 CSS</div>
+                <div style="background: #252525; padding: 16px; margin-top: 4px; font-size: 10px; color: #888;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>设置对话框</h3>
+      <p>在现有的"设置"对话框中添加主题选择。需要先打开设置（文件 → 设置），略繁琐。</p>
+      <p style="color: #888;">对低频设置更合适</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-image">
+      <div class="mockup" style="margin: 0;">
+        <div class="mockup-header">方案 C：两者都有</div>
+        <div class="mockup-body">
+          <div style="display: flex; gap: 4px; font-size: 11px;">
+            <div style="flex: 1; background: #333; padding: 6px; color: #ccc;">
+              <div style="font-size: 10px; color: #888; margin-bottom: 2px;">视图菜单</div>
+              <div style="padding: 2px;">源码 (Ctrl+1)</div>
+              <div style="padding: 2px;">预览 (Ctrl+2)</div>
+              <div style="padding: 2px; background: #4a9eff; color: #fff;">🌙 暗色主题</div>
+            </div>
+            <div style="flex: 1; background: #3a3a3a; padding: 6px; color: #ccc; border: 1px solid #5a5a5a;">
+              <div style="font-size: 10px; color: #888; margin-bottom: 2px;">设置对话框</div>
+              <div style="font-size: 10px; color: #aaa;">主题<br>
+                <span style="background: #555; padding: 1px 4px;">☀️</span>
+                <span style="background: #4a9eff; padding: 1px 4px;">🌙 ✓</span>
+              </div>
+              <div style="font-size: 10px; color: #aaa; margin-top: 4px;">CSS<br><span style="color: #666;">...</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>两者都有（推荐）</h3>
+      <p>菜单提供快速切换，设置对话框提供完整选项。菜单修改即时反映到设置对话框。</p>
+      <p style="color: #4a9eff;">✅ 兼顾便捷性和可发现性</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="options">
+    <div class="option" data-choice="c" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>两者都有（推荐）</h3>
+        <p>视图菜单中加快速切换项 + 设置对话框中加主题选择区域。AppConfig 统一存储。</p>
+      </div>
+    </div>
+  </div>
+</div>

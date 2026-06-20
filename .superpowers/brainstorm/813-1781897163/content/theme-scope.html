@@ -1,0 +1,107 @@
+<h2>主题切换的范围是什么？</h2>
+<p class="subtitle">zdown 应该支持多少种主题？</p>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-image">
+      <div class="mockup" style="margin: 0;">
+        <div class="mockup-header">方案 A：亮/暗 二选一</div>
+        <div class="mockup-body" style="padding: 0;">
+          <div style="display: flex;">
+            <div style="flex: 1; background: #fafafa; padding: 12px; font-size: 12px; color: #222;">
+              <div style="font-weight: bold; margin-bottom: 4px;">☀️ 亮色</div>
+              <div style="background: #fff; padding: 4px 8px; margin-bottom: 4px; border: 1px solid #ddd;">菜单栏</div>
+              <div style="display: flex; gap: 4px;">
+                <div style="width: 80px; background: #f5f5f5; padding: 4px; font-size: 10px;">大纲</div>
+                <div style="flex: 1; background: #fff; padding: 4px; font-size: 10px; border: 1px solid #eee;">
+                  <span style="color: #1976d2;"># 文档</span><br>
+                  <span style="color: #333;">编辑内容</span>
+                </div>
+              </div>
+            </div>
+            <div style="flex: 1; background: #1e1e1e; padding: 12px; font-size: 12px; color: #ccc;">
+              <div style="font-weight: bold; margin-bottom: 4px; color: #fff;">🌙 暗色</div>
+              <div style="background: #2d2d2d; padding: 4px 8px; margin-bottom: 4px; border: 1px solid #444;">菜单栏</div>
+              <div style="display: flex; gap: 4px;">
+                <div style="width: 80px; background: #252525; padding: 4px; font-size: 10px;">大纲</div>
+                <div style="flex: 1; background: #1e1e1e; padding: 4px; font-size: 10px; border: 1px solid #333;">
+                  <span style="color: #569cd6;"># 文档</span><br>
+                  <span style="color: #d4d4d4;">编辑内容</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>亮/暗 切换</h3>
+      <p>最简单的方案。菜单中加一个"亮色/暗色"切换项。egui 原生支持两种 Visuals。</p>
+      <p style="color: #4a9eff;">✅ 实现简单，覆盖 95% 需求</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-image">
+      <div class="mockup" style="margin: 0;">
+        <div class="mockup-header">方案 B：多主题选择</div>
+        <div class="mockup-body">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; font-size: 10px;">
+            <div style="background: #fafafa; padding: 6px; text-align: center; color: #222; border: 1px solid #ddd;">☀️ 亮色</div>
+            <div style="background: #1e1e1e; padding: 6px; text-align: center; color: #ccc; border: 1px solid #444;">🌙 暗色</div>
+            <div style="background: #f5e6c8; padding: 6px; text-align: center; color: #5c4033; border: 1px solid #d4c5a0;">📜 暖色</div>
+            <div style="background: #000; padding: 6px; text-align: center; color: #0f0; border: 1px solid #333;">💻 终端</div>
+            <div style="background: #f0f4ff; padding: 6px; text-align: center; color: #1a237e; border: 1px solid #c5cae9;">🔵 蓝调</div>
+            <div style="background: #e8f5e9; padding: 6px; text-align: center; color: #1b5e20; border: 1px solid #a5d6a7;">🌿 自然</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>多个预设主题</h3>
+      <p>提供 4-6 个精心设计的主题供选择。需要为每个主题定义颜色方案（egui Visuals 配置）。</p>
+      <p style="color: #cc0;">⚠️ 工作量大，维护成本高</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-image">
+      <div class="mockup" style="margin: 0;">
+        <div class="mockup-header">方案 C：亮/暗 + 语法主题独立</div>
+        <div class="mockup-body">
+          <div style="display: flex; gap: 8px; font-size: 12px;">
+            <div style="flex: 1;">
+              <div style="margin-bottom: 4px; font-weight: bold;">UI 主题</div>
+              <div style="background: #2d2d2d; color: #fff; padding: 4px; margin-bottom: 2px;">☀️ 亮色</div>
+              <div style="background: #1e1e1e; color: #ccc; padding: 4px; border: 1px solid #4a9eff;">🌙 暗色 ✓</div>
+            </div>
+            <div style="flex: 1;">
+              <div style="margin-bottom: 4px; font-weight: bold;">代码主题</div>
+              <div style="background: #2d2d2d; padding: 4px; margin-bottom: 2px; font-size: 10px;">
+                <span style="color: #569cd6;">GitHub Light</span>
+              </div>
+              <div style="background: #1e1e1e; padding: 4px; font-size: 10px; border: 1px solid #4a9eff;">
+                <span style="color: #dcdcaa;">Ocean Dark</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>UI 主题 + 代码主题分离</h3>
+      <p>亮/暗 UI 与语法高亮主题独立选择。例如：暗色 UI + GitHub Light 语法高亮。</p>
+      <p style="color: #cc0;">⚠️ 组合复杂，增加配置维度</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="options">
+    <div class="option" data-choice="a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>亮/暗 二选一（推荐）</h3>
+        <p>简单、实用。菜单切换，持久化到 AppConfig。暗色默认（保持当前行为），可选亮色。代码高亮主题自动跟随。</p>
+      </div>
+    </div>
+  </div>
+</div>

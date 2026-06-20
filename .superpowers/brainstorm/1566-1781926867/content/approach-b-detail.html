@@ -1,0 +1,84 @@
+<h2>方案 B：本地 mermaid-cli 详解</h2>
+<p class="subtitle">通过 Node.js 命令行工具在本地渲染 Mermaid 图表</p>
+
+<div class="section">
+  <h3>工作流程</h3>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:16px;border-radius:8px;font-size:13px;">
+Markdown 源码                  zdown 内部流程                    输出
+============                  ================                  ====
+```mermaid                   1. 解析 → CodeBlock
+graph TD                     2. 检测 language="mermaid"
+    A → B                    3. 写入临时 .mmd 文件
+    B → C                    4. 调用 mmdc -i in.mmd -o out.svg
+```                          5. 读取 out.svg → 嵌入渲染       SVG 图表
+                             6. 清理临时文件
+  </pre>
+</div>
+
+<div class="section">
+  <h3>依赖关系</h3>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:16px;border-radius:8px;font-size:13px;">
+用户系统                  zdown（Rust）                  mermaid-cli
+========                 =============                  ===========
+Node.js ≥ 16  ──required──→  Command::new("mmdc")  ──runs──→  @mermaid-js/mermaid-cli
+npm / pnpm   安装 mmdc      std::process::Command               puppeteer (无头 Chromium)
+                            stdout/stderr 捕获                  渲染为 SVG/PNG/PDF
+  </pre>
+</div>
+
+<div class="section">
+  <h3>Rust 侧实现要点</h3>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:16px;border-radius:8px;font-size:13px;">
+// 伪代码
+fn render_mermaid_cli(content: &str) -> Result&lt;String&gt; {
+    let tmp = tempfile::tempdir()?;
+    let input = tmp.path().join("diagram.mmd");
+    let output = tmp.path().join("diagram.svg");
+    fs::write(&input, content)?;
+
+    let status = Command::new("mmdc")
+        .arg("-i").arg(&input)
+        .arg("-o").arg(&output)
+        .arg("-b").arg("transparent")  // 透明背景
+        .status()?;
+
+    if !status.success() {
+        return Err("mmdc 执行失败".into());
+    }
+    fs::read_to_string(&output)
+}
+// 需要处理：mmdc 未安装、超时、语法错误
+  </pre>
+</div>
+
+<div class="pros-cons">
+  <div class="pros">
+    <h4>✓ 优点</h4>
+    <ul>
+      <li>完整 Mermaid 语法支持（与官方同步）</li>
+      <li>离线工作，不依赖外部网络</li>
+      <li>SVG 输出质量高，可嵌入 PDF</li>
+      <li>可配置主题、尺寸、背景</li>
+    </ul>
+  </div>
+  <div class="cons">
+    <h4>✗ 缺点</h4>
+    <ul>
+      <li>需要用户安装 Node.js + mmdc（~200MB）</li>
+      <li>首次启动慢（启动 Chromium）</li>
+      <li>进程调用有开销（每次渲染 ~1-3 秒）</li>
+      <li>平台兼容性（Windows/Linux/macOS 路径处理）</li>
+      <li>puppeteer/Chromium 在 headless 环境可能失败</li>
+    </ul>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">错误处理层级</div>
+  <div class="mockup-body" style="font-size:13px;line-height:1.6;">
+    <p>1️⃣ <strong>mmdc 未安装</strong> → 降级为代码块语法高亮 + 提示"安装 mmdc 以渲染图表"</p>
+    <p>2️⃣ <strong>Mermaid 语法错误</strong> → 显示错误信息在图表位置</p>
+    <p>3️⃣ <strong>超时（&gt;10s）</strong> → 终止进程，显示超时提示</p>
+    <p>4️⃣ <strong>Chromium 启动失败</strong> → 降级提示，建议检查环境</p>
+  </div>
+</div>

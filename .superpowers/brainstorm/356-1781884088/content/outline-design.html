@@ -1,0 +1,102 @@
+<h2>大纲功能 — 设计概览</h2>
+<p class="subtitle">方案 A：AST 提取 + 左侧固定面板 + 统一光标跳转</p>
+
+<div class="section">
+  <h3>1. 新文件：outline_view.rs</h3>
+  <p>独立的视图模块，职责单一：从 AST 提取标题 → 渲染侧边栏 → 处理点击跳转。</p>
+
+  <pre><code>crates/zdown-app/src/outline_view.rs   ← 新建</code></pre>
+
+  <h4>核心函数签名</h4>
+  <pre><code>pub fn show_outline_panel(ui: &mut egui::Ui, state: &mut EditorState)
+pub fn extract_outline(doc: &Document) -> Vec&lt;OutlineItem&gt;</code></pre>
+
+  <div class="mockup" style="margin-top:12px;">
+    <div class="mockup-header">outline_view.rs 结构</div>
+    <div class="mockup-body" style="font-size:13px; font-family: monospace; padding:16px;">
+      <p>// 数据结构<br>struct OutlineItem { level: u8, text: String, line: usize }</p>
+      <p style="margin-top:8px;">// 从 AST 提取<br>fn extract_outline(doc: &Document) -> Vec&lt;OutlineItem&gt;<br>  → 遍历 doc.blocks，筛选 Block::Heading<br>  → 用 inlines_to_plain 提取纯文本<br>  → 用 span.start_line 获取行号</p>
+      <p style="margin-top:8px;">// 渲染面板<br>fn show_outline_panel(ui, state)<br>  → egui::ScrollArea 包含可点击标题<br>  → 缩进 = (level - 1) * 16px<br>  → H1 粗体，H3+ 小号字体<br>  → 点击 → editor.set_cursor(Cursor::new(line, 0))</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. UI 集成（main.rs）</h3>
+  <p>在现有视图外部包裹 <code>SidePanel::left</code>，不改变内部视图逻辑。</p>
+
+  <pre><code>// main.rs 修改（伪代码）
+fn ui(&mut self, ui: &mut egui::Ui, ...) {
+    menu::show_menu(...);
+    // ↓ 新增
+    egui::SidePanel::left("outline_panel")
+        .resizable(true)
+        .default_width(200.0)
+        .show_inside(ui, |ui| {
+            outline_view::show_outline_panel(ui, &mut self.state);
+        });
+    // ↓ 原有的中央区域
+    egui::CentralPanel::default().show_inside(ui, |ui| {
+        match self.view_mode { ... }  // 源码/预览/Hybrid
+    });
+}</code></pre>
+</div>
+
+<div class="section">
+  <h3>3. 视觉层级</h3>
+  <div class="mockup" style="width:100%;">
+    <div class="mockup-header">大纲面板预览</div>
+    <div class="mockup-body">
+      <div style="font-family:monospace;font-size:14px;line-height:2;padding:8px;">
+        <p style="font-weight:700;font-size:15px;">📑 大纲</p>
+        <p style="margin:0;font-weight:600;">● 项目概述</p>
+        <p style="margin:0;padding-left:16px;font-size:13px;">● 架构说明</p>
+        <p style="margin:0;padding-left:32px;font-size:12px;color:#666;">● 核心模块</p>
+        <p style="margin:0;padding-left:32px;font-size:12px;color:#666;">● API 接口</p>
+        <p style="margin:0;font-weight:600;">● 使用指南</p>
+        <p style="margin:0;padding-left:16px;font-size:13px;">● 快速开始</p>
+        <p style="margin:0;padding-left:16px;font-size:13px;">● 常见问题</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. 边界情况</h3>
+  <table style="width:100%;font-size:13px;">
+    <tr><th>场景</th><th>行为</th></tr>
+    <tr><td>空文档</td><td>面板显示 "（无标题）"</td></tr>
+    <tr><td>文档只有正文无标题</td><td>同上</td></tr>
+    <tr><td>标题文本为空（###）</td><td>显示为 "(空标题)"</td></tr>
+    <tr><td>标题文本很长</td><td>CSS text-overflow:ellipsis，悬停 tooltip</td></tr>
+    <tr><td>语法错误的 #（不构成标题）</td><td>parser 不识别为 Heading，不出现在大纲</td></tr>
+    <tr><td>文档编辑中</td><td>每帧重新解析，大纲实时更新</td></tr>
+    <tr><td>点击不存在的行号</td><td>set_cursor 验证行号有效性，panic-free</td></tr>
+    <tr><td>面板宽度为 0（用户拖拽关闭）</td><td>正常，可拖回</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>5. 文件变更清单</h3>
+  <table style="width:100%;font-size:13px;">
+    <tr><th>文件</th><th>变更</th></tr>
+    <tr><td>crates/zdown-app/src/outline_view.rs</td><td><strong>新建</strong> — extract_outline + show_outline_panel</td></tr>
+    <tr><td>crates/zdown-app/src/main.rs</td><td>修改 — 引入 mod outline_view，添加 SidePanel::left</td></tr>
+    <tr><td>crates/markdown_renderer/src/render.rs</td><td>不变 — 复用已有的 inlines_to_plain 函数</td></tr>
+  </table>
+  <p style="margin-top:8px;font-size:13px;color:#666;">仅 3 个文件变更（1 新建 + 2 修改），无新依赖。</p>
+</div>
+
+<div class="section">
+  <h3>6. 测试计划</h3>
+  <table style="width:100%;font-size:13px;">
+    <tr><th>测试</th><th>类型</th></tr>
+    <tr><td>extract_outline_empty_doc → Vec::new()</td><td>unit</td></tr>
+    <tr><td>extract_outline_single_h1 → 1 item, level=1</td><td>unit</td></tr>
+    <tr><td>extract_outline_multiple_levels → correct count & order</td><td>unit</td></tr>
+    <tr><td>extract_outline_no_headings → Vec::new()</td><td>unit</td></tr>
+    <tr><td>extract_outline_nested_headings → correct line numbers</td><td>unit</td></tr>
+    <tr><td>OutlineItem text is plain (no markdown syntax)</td><td>unit</td></tr>
+    <tr><td>click_jumps_to_correct_line (via integration)</td><td>integration</td></tr>
+  </table>
+</div>

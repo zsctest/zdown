@@ -1,0 +1,114 @@
+<h2>搜索栏 UI 设计</h2>
+<p class="subtitle">方案 A 顶部浮动栏的具体布局和交互</p>
+
+<div class="section">
+  <h3>搜索栏布局</h3>
+  <div class="mockup" style="border: 1px solid #4a9eff;">
+    <div class="mockup-header" style="background: #1a3a5c;">🔍 搜索栏（Ctrl+F 激活，Esc 关闭）</div>
+    <div class="mockup-body" style="background: #2a2a2a; padding: 6px 8px; font-family: monospace;">
+      <!-- Row 1: Find -->
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+        <span style="color: #888; font-size: 12px; width: 48px;">查找:</span>
+        <input class="mock-input" placeholder="输入搜索文本..." style="flex: 1; font-size: 13px; padding: 2px 6px;">
+        <span style="color: #888; font-size: 11px; min-width: 30px;">0/0</span>
+        <button class="mock-button" style="font-size: 12px; padding: 2px 6px;" title="区分大小写">Aa</button>
+        <button class="mock-button" style="font-size: 12px; padding: 2px 6px;" title="全词匹配">ab|</button>
+        <button class="mock-button" style="font-size: 12px; padding: 2px 6px;" title="上一个">←</button>
+        <button class="mock-button" style="font-size: 12px; padding: 2px 6px;" title="下一个">→</button>
+        <button class="mock-button" style="font-size: 12px; padding: 2px 6px; color: #f88;" title="关闭">✕</button>
+      </div>
+      <!-- Row 2: Replace (shown when toggle clicked) -->
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span style="color: #888; font-size: 12px; width: 48px;">替换:</span>
+        <input class="mock-input" placeholder="替换文本..." style="flex: 1; font-size: 13px; padding: 2px 6px;">
+        <button class="mock-button" style="font-size: 12px; padding: 2px 8px;" title="替换当前">替换</button>
+        <button class="mock-button" style="font-size: 12px; padding: 2px 8px;" title="替换全部">全部</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>交互说明</h3>
+  <table style="width: 100%; border-collapse: collapse;">
+    <tr style="border-bottom: 1px solid #444;">
+      <th style="text-align: left; padding: 6px; color: #aaa;">操作</th>
+      <th style="text-align: left; padding: 6px; color: #aaa;">行为</th>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 6px;"><code>Ctrl+F</code></td>
+      <td style="padding: 6px;">打开搜索栏，焦点进入查找输入框，选中已有文本（如有）</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 6px;"><code>Enter</code>（在查找框中）</td>
+      <td style="padding: 6px;">跳到下一个匹配</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 6px;"><code>Shift+Enter</code></td>
+      <td style="padding: 6px;">跳到上一个匹配</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 6px;"><code>Esc</code></td>
+      <td style="padding: 6px;">关闭搜索栏，清除匹配高亮</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 6px;">点击 <code>Aa</code></td>
+      <td style="padding: 6px;">切换区分大小写（按下状态有视觉反馈）</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 6px;">点击 <code>ab|</code></td>
+      <td style="padding: 6px;">切换全词匹配</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 6px;">点击 <code>←</code> / <code>→</code></td>
+      <td style="padding: 6px;">导航到上/下一个匹配，编辑器光标跟随移动</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 6px;">输入文本变化</td>
+      <td style="padding: 6px;">实时重新搜索，更新匹配列表和计数</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #333;">
+      <td style="padding: 6px;">点击 <code>替换</code></td>
+      <td style="padding: 6px;">替换当前高亮匹配，自动跳到下一个</td>
+    </tr>
+    <tr>
+      <td style="padding: 6px;">点击 <code>全部</code></td>
+      <td style="padding: 6px;">替换所有匹配项（作为一个 undo 组，一次 Ctrl+Z 全部撤销）</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>在源码视图中的位置</h3>
+  <div class="mockup">
+    <div class="mockup-header">源码视图 — 搜索栏在编辑器内容上方</div>
+    <div class="mockup-body">
+      <div class="mock-nav" style="font-size: 12px;">文件 | 编辑 | 视图</div>
+      <div style="display: flex;">
+        <div class="mock-sidebar" style="width: 140px; font-size: 12px;">📋 大纲<br>标题 1<br>标题 2</div>
+        <div class="mock-content" style="flex: 1;">
+          <!-- Search bar -->
+          <div style="background: #2a2a2a; padding: 4px 8px; border-bottom: 1px solid #4a9eff; font-size: 12px;">
+            🔍 查找: <span style="border-bottom: 1px solid #666; padding: 0 12px; color: #ccc;">搜索</span>
+            <span style="color: #888; margin: 0 6px;">2/5</span>
+            <span style="color: #888;">Aa ab| ← → ✕</span>
+          </div>
+          <!-- Editor content -->
+          <div style="font-family: monospace; font-size: 12px; line-height: 1.6; padding: 4px;">
+            <span style="color: #888;"> 1</span> <span style="color: #ccc;"># 我的文档</span><br>
+            <span style="color: #888;"> 2</span> <br>
+            <span style="color: #888;"> 3</span> <span style="color: #ccc;">这是</span><span style="background: #6b4c12; color: #fff; padding: 1px 0;">搜索</span><span style="color: #ccc;">功能测试</span><br>
+            <span style="color: #888;"> 4</span> <br>
+            <span style="color: #888;"> 5</span> <span style="color: #ccc;">当前匹配 → </span><span style="background: #d4850b; color: #fff; padding: 1px 0;">搜索</span><span style="color: #ccc;">高亮 ←</span><br>
+            <span style="color: #888;"> 6</span> <span style="color: #ccc;">其他</span><span style="background: #6b4c12; color: #fff; padding: 1px 0;">搜索</span><span style="color: #ccc;">结果</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="color: #aaa; font-size: 13px; margin-top: 8px;">
+    💡 高亮区分：<span style="background: #d4850b; color: #fff; padding: 1px 4px;">当前匹配</span> 用橙色，
+    <span style="background: #6b4c12; color: #fff; padding: 1px 4px;">其他匹配</span> 用暗黄。
+    光标自动跳到当前匹配位置。
+  </p>
+</div>

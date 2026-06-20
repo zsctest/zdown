@@ -1,0 +1,92 @@
+<h2>大纲/目录 - 布局方案对比</h2>
+<p class="subtitle">在 zdown 编辑器中展示文档标题层级的三种方式</p>
+
+<div class="section">
+  <h3>当前布局（无大纲）</h3>
+  <div class="mockup">
+    <div class="mockup-header">zdown — untitled.md (*)</div>
+    <div class="mock-nav">文件 ▾ &nbsp; 编辑 ▾ &nbsp; 视图 ▾</div>
+    <div style="display:flex; min-height:200px;">
+      <div class="mock-content" style="flex:1;">
+        <p style="font-weight:bold;"># 一级标题</p>
+        <p>段落内容...</p>
+        <p style="font-weight:bold;">## 二级标题</p>
+        <p>更多内容...</p>
+        <p style="font-weight:bold;">### 三级标题</p>
+        <p>内容...</p>
+        <p style="font-weight:bold;">### 另一个三级</p>
+        <p>结束</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>左侧固定侧边栏</h3>
+      <p>大纲始终显示在左侧面板，宽度约 200px，跟随编辑器内容可滚动。类似 VS Code 的 Outline 面板。</p>
+      <div class="mockup" style="margin-top:12px;">
+        <div class="mockup-header">zdown</div>
+        <div style="display:flex; min-height:120px;">
+          <div style="width:180px; background:#f5f5f5; padding:8px; font-size:13px; border-right:1px solid #ddd;">
+            <p style="font-weight:600;margin-bottom:4px;">📑 大纲</p>
+            <p style="padding-left:0px;">一级标题</p>
+            <p style="padding-left:12px;font-size:12px;">二级标题</p>
+            <p style="padding-left:24px;font-size:12px;">三级标题</p>
+            <p style="padding-left:24px;font-size:12px;">另一个三级</p>
+          </div>
+          <div style="flex:1;padding:8px;">
+            <p style="font-weight:bold;"># 一级标题</p>
+            <p>段落内容...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>右侧浮动面板</h3>
+      <p>大纲显示在预览区域右上角的浮动面板，可收起/展开，不占用编辑区域空间。</p>
+      <div class="mockup" style="margin-top:12px;">
+        <div class="mockup-header">zdown</div>
+        <div style="display:flex; min-height:120px;">
+          <div style="flex:1;padding:8px;">
+            <p style="font-weight:bold;"># 一级标题</p>
+            <p>段落内容...</p>
+          </div>
+          <div style="width:180px; padding:8px; font-size:13px;">
+            <div style="border:1px solid #ccc;border-radius:4px;padding:8px;background:#fff;">
+              <p style="font-weight:600;margin-bottom:4px;">📑 大纲 ▲</p>
+              <p style="padding-left:0px;">一级标题</p>
+              <p style="padding-left:12px;">二级标题</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>可切换侧边栏 + 快捷键</h3>
+      <p>左侧面板通过 View 菜单或 Ctrl+B 切换显示/隐藏。源码模式下显示行号，大纲面板在源代码旁边。这是最灵活但实现最复杂的方案。</p>
+      <div class="mockup" style="margin-top:12px;">
+        <div class="mockup-header">zdown — 视图 ▾</div>
+        <div style="display:flex; min-height:100px;">
+          <div style="width:180px; background:#f5f5f5; padding:8px; font-size:13px; border-right:1px solid #ddd;">
+            <p style="line-height:1.4;">☑ 大纲 (Ctrl+B)<br>☐ 源码<br>☑ 预览</p>
+          </div>
+          <div style="flex:1;padding:8px;">
+            <p style="font-weight:bold;"># 一级标题</p>
+            <p>内容...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

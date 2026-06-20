@@ -47,7 +47,6 @@ pub fn pick_open_image() -> Option<PathBuf> {
         .pick_file()
 }
 
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]

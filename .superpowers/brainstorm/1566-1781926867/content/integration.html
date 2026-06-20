@@ -1,0 +1,67 @@
+<h2>集成到现有视图和导出引擎</h2>
+<p class="subtitle">在三个渲染路径中拦截 mermaid 代码块</p>
+
+<div class="section">
+  <h3>拦截点一览</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <tr style="background:#2a2a4a">
+      <th style="padding:8px;text-align:left">层</th>
+      <th style="padding:8px;text-align:left">文件</th>
+      <th style="padding:8px;text-align:left">函数</th>
+      <th style="padding:8px;text-align:left">改动</th>
+    </tr>
+    <tr>
+      <td style="padding:8px">egui 预览</td>
+      <td style="padding:8px"><code>markdown_renderer/src/render.rs</code></td>
+      <td style="padding:8px"><code>render_code_block()</code></td>
+      <td style="padding:8px">检测 language="mermaid" → 请求 SVG → egui::Image</td>
+    </tr>
+    <tr style="background:#1a1a2e">
+      <td style="padding:8px">HTML 导出</td>
+      <td style="padding:8px"><code>export_engine/src/html.rs</code></td>
+      <td style="padding:8px"><code>render_code_block()</code></td>
+      <td style="padding:8px">检测 language="mermaid" → 内嵌 SVG 到 &lt;img&gt;</td>
+    </tr>
+    <tr>
+      <td style="padding:8px">PDF 导出</td>
+      <td style="padding:8px"><code>export_engine/src/renderer.rs</code></td>
+      <td style="padding:8px"><code>render_code_block()</code></td>
+      <td style="padding:8px">检测 language="mermaid" → SVG 转 raster → genpdf::Image</td>
+    </tr>
+    <tr style="background:#1a1a2e">
+      <td style="padding:8px">源码视图</td>
+      <td style="padding:8px"><code>source_view.rs</code></td>
+      <td style="padding:8px">—</td>
+      <td style="padding:8px"><strong>不变</strong>（源码模式显示原始文本）</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>egui 预览中的 SVG 渲染</h3>
+  <p>egui 原生不支持 SVG。需要将 SVG 转为光栅图像：</p>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:16px;border-radius:8px;font-size:13px;">
+// 方案：使用 resvg + tiny-skia 将 SVG 渲染为 egui::ColorImage
+fn render_svg_to_egui_image(svg: &str, scale: f32) -> egui::ColorImage {
+    let tree = resvg::usvg::Tree::from_str(svg, &resvg::usvg::Options::default())?;
+    let size = tree.size();
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(
+        (size.width() * scale) as u32,
+        (size.height() * scale) as u32,
+    )?;
+    resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap);
+    // pixmap → egui::ColorImage
+}
+  </pre>
+  <p>需要新增依赖：<code>resvg = "0.42"</code>, <code>tiny-skia = "0.11"</code></p>
+</div>
+
+<div class="section">
+  <h3>HTML 导出中的 SVG</h3>
+  <p>最简单——直接将 SVG 字符串内嵌为 <code>data:image/svg+xml;utf8,...</code> 的 <code>&lt;img&gt;</code> 标签</p>
+</div>
+
+<div class="section">
+  <h3>PDF 导出中的 SVG</h3>
+  <p>同样用 resvg 转为光栅，再通过 genpdf::elements::Image 嵌入</p>
+</div>

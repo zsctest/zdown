@@ -1,0 +1,58 @@
+<h2>错误处理 & 缓存策略</h2>
+<p class="subtitle">健壮性和性能的平衡</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">错误处理矩阵</div>
+    <div class="mockup-body" style="font-size:12px;line-height:1.6;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tr style="background:#2a2a4a"><th style="padding:6px">场景</th><th style="padding:6px">行为</th></tr>
+        <tr><td style="padding:6px">✅ 网络成功</td><td style="padding:6px">渲染 SVG 图表</td></tr>
+        <tr style="background:#1a1a2e"><td style="padding:6px">⏱️ 网络超时</td><td style="padding:6px">降级为代码高亮</td></tr>
+        <tr><td style="padding:6px">❌ Mermaid 语法错误</td><td style="padding:6px">显示错误摘要</td></tr>
+        <tr style="background:#1a1a2e"><td style="padding:6px">🔌 无网络</td><td style="padding:6px">降级 + 缓存命中可用</td></tr>
+        <tr><td style="padding:6px">🖼️ SVG 解析失败</td><td style="padding:6px">降级为代码高亮</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">缓存策略</div>
+    <div class="mockup-body" style="font-size:12px;line-height:1.6;">
+      <p><strong>内容寻址缓存：</strong></p>
+      <p>对 Mermaid 源码做 <strong>SHA256 哈希</strong>作为缓存键</p>
+      <p>缓存值 = SVG 字符串</p>
+      <br>
+      <p><strong>LRU 淘汰：</strong>上限 50 条</p>
+      <p><strong>会话内有效：</strong>不持久化到磁盘</p>
+      <br>
+      <p style="color:#8b949e;">同一图表多次出现 → 只请求一次</p>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">依赖汇总</div>
+  <div class="mockup-body" style="font-size:13px;">
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="background:#2a2a4a"><th style="padding:8px">依赖</th><th style="padding:8px">用途</th><th style="padding:8px">已有？</th></tr>
+      <tr><td style="padding:8px"><code>ureq</code></td><td style="padding:8px">HTTP GET mermaid.ink</td><td style="padding:8px">✅ 已有</td></tr>
+      <tr style="background:#1a1a2e"><td style="padding:8px"><code>base64</code></td><td style="padding:8px">URL 编码</td><td style="padding:8px">✅ 已有</td></tr>
+      <tr><td style="padding:8px"><code>resvg</code></td><td style="padding:8px">SVG → egui 光栅</td><td style="padding:8px">🆕 需添加</td></tr>
+      <tr style="background:#1a1a2e"><td style="padding:8px"><code>tiny-skia</code></td><td style="padding:8px">resvg 的光栅后端</td><td style="padding:8px">🆕 需添加</td></tr>
+      <tr><td style="padding:8px"><code>lru</code></td><td style="padding:8px">LRU 缓存</td><td style="padding:8px">🆕 需添加</td></tr>
+      <tr style="background:#1a1a2e"><td style="padding:8px"><code>flate2</code></td><td style="padding:8px">pako deflate 压缩</td><td style="padding:8px">🆕 需添加</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>文件结构</h3>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:16px;border-radius:8px;font-size:13px;">
+crates/mermaid_renderer/
+├── Cargo.toml          ← 新 crate
+└── src/
+    ├── lib.rs           ← MermaidRenderer struct + is_mermaid()
+    ├── encode.rs        ← pako deflate + base64url URL 编码
+    └── cache.rs         ← SHA256 + LRU 缓存
+  </pre>
+</div>

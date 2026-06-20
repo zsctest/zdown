@@ -1,0 +1,82 @@
+<h2>大纲实现 — 两种方案对比</h2>
+<p class="subtitle">技术实现层面的选择</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>AST 提取方案（推荐）</h3>
+      <p>从已解析的 Document AST 中提取 <code>Block::Heading</code> 节点，使用 <code>BlockWithSpan.span.start_line</code> 获取行号，<code>Heading.level</code> 获取层级，<code>Heading.inlines</code> 渲染标题文本。</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优点</h4>
+          <ul>
+            <li>复用已有解析基础设施（RenderCache）</li>
+            <li>行号精确（来自 parser 的 span 信息）</li>
+            <li>不需要额外的文本扫描</li>
+            <li>与编辑器内容完全一致</li>
+          </ul>
+        </div>
+        <div class="cons"><h4>缺点</h4>
+          <ul>
+            <li>依赖 AST 解析正确性</li>
+            <li>语法错误时可能缺失部分标题</li>
+            <li>空行前的标题可能边界不准</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>正则扫描方案</h3>
+      <p>直接用正则 <code>^(#{1,6})\s+(.+)$</code> 扫描源码文本提取标题和行号。不依赖 AST 解析。</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>优点</h4>
+          <ul>
+            <li>不依赖 AST 解析结果</li>
+            <li>即使解析出错也能工作</li>
+            <li>实现极简</li>
+          </ul>
+        </div>
+        <div class="cons"><h4>缺点</h4>
+          <ul>
+            <li>无法识别代码块内的 # 注释（误判）</li>
+            <li>无法处理 Setext 风格标题（=== / ---）</li>
+            <li>标题文本可能包含内联标记（**粗体**）未处理</li>
+            <li>需要额外维护正则逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<h3>推荐方案 A — AST 提取</h3>
+
+<p>使用已有的 <code>Document.blocks</code> 筛选 <code>Block::Heading</code> 节点：</p>
+
+<pre><code>/// 从 Document AST 提取大纲项
+struct OutlineItem {
+    level: u8,        // 1-6
+    text: String,      // 纯文本标题（去掉内联标记）
+    line: usize,       // 在源码中的行号
+}
+
+fn extract_outline(doc: &Document) -> Vec&lt;OutlineItem&gt; {
+    doc.blocks.iter()
+        .filter_map(|bws| match &bws.block {
+            Block::Heading(h) => Some(OutlineItem {
+                level: h.level,
+                text: inlines_to_plain(&h.inlines),
+                line: bws.span.start_line,
+            }),
+            _ => None,
+        })
+        .collect()
+}</code></pre>
+
+<p>核心逻辑简单，复用已有基础设施。边缘情况（代码块内误判等）由 markdown parser 处理。</p>

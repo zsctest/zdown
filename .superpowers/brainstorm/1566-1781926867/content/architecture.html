@@ -1,0 +1,76 @@
+<h2>Mermaid 渲染架构</h2>
+<p class="subtitle">基于 mermaid.ink 的纯 HTTP SVG 渲染路径</p>
+
+<div class="section">
+  <h3>核心模块：mermaid_renderer</h3>
+  <p>新增一个轻量 crate <code>crates/mermaid_renderer/</code>，负责：</p>
+  <ol>
+    <li>将 Mermaid 语法编码为 mermaid.ink URL</li>
+    <li>HTTP GET 获取 SVG 响应</li>
+    <li>返回 SVG 字符串供各视图/导出使用</li>
+  </ol>
+</div>
+
+<div class="section">
+  <h3>URL 编码方式</h3>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:16px;border-radius:8px;font-size:13px;">
+// 方式 A：GET 请求（简单图表）
+https://mermaid.ink/img/pako:<base64url-encoded-mermaid>
+
+// 方式 B：POST 请求（复杂图表，避免 URL 长度限制）
+POST https://mermaid.ink/img
+Body: <mermaid source code>
+
+// 推荐：优先 GET，超过 URL 长度阈值后降级 POST
+  </pre>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">调用流程</div>
+    <div class="mockup-body" style="font-size:12px;line-height:1.5;">
+      <code>CodeBlock(lang="mermaid")</code><br>
+      &nbsp;&nbsp;↓<br>
+      <code>MermaidRenderer::render(content)</code><br>
+      &nbsp;&nbsp;↓<br>
+      <code>encode → pako deflate → base64url</code><br>
+      &nbsp;&nbsp;↓<br>
+      <code>ureq::get("mermaid.ink/img/pako:...")</code><br>
+      &nbsp;&nbsp;↓<br>
+      <code>SVG string / Error</code><br>
+      &nbsp;&nbsp;↓<br>
+      嵌入 egui 图像 / HTML &lt;img&gt; / PDF 嵌入
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">降级链</div>
+    <div class="mockup-body" style="font-size:12px;line-height:1.5;">
+      1️⃣ 网络请求成功 → 返回 SVG<br>
+      2️⃣ 网络超时 (10s) → 降级为代码高亮<br>
+      3️⃣ Mermaid 语法错误 → 显示错误文本<br>
+      4️⃣ 非 mermaid 代码块 → 原样高亮
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">模块接口设计</div>
+  <div class="mockup-body" style="font-size:13px;">
+    <pre style="background:#0d1117;color:#c9d1d9;padding:12px;border-radius:6px;">
+/// Mermaid 渲染器
+pub struct MermaidRenderer {
+    client: ureq::Agent,  // 连接复用
+    timeout: Duration,
+    cache: LruCache<String, String>, // 可选缓存
+}
+
+impl MermaidRenderer {
+    /// 渲染 Mermaid 源码为 SVG 字符串
+    fn render(&self, source: &str) -> Result<String, Error>
+
+    /// 判断 CodeBlock 是否为 mermaid 图表
+    fn is_mermaid(cb: &CodeBlock) -> bool
+}
+</pre>
+  </div>
+</div>

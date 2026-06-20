@@ -1,0 +1,85 @@
+<h2>哪些视图需要搜索功能？</h2>
+<p class="subtitle">zdown 有三种视图模式：源码、预览、Hybrid。搜索功能应在哪些视图中可用？</p>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-image">
+      <div class="mockup" style="margin: 0;">
+        <div class="mockup-header">源码视图 (Ctrl+1)</div>
+        <div class="mockup-body">
+          <div style="font-family: monospace; font-size: 12px; line-height: 1.5; min-height: 120px;">
+            <span style="color: #888;"> 1</span> <span style="color: #ccc;"># 我的文档</span><br>
+            <span style="color: #888;"> 2</span> <br>
+            <span style="color: #888;"> 3</span> <span style="color: #ccc;">这是</span><span style="background: #6b4c12; color: #fff;">搜索</span><span style="color: #ccc;">文本</span><br>
+            <span style="color: #888;"> 4</span> <br>
+            <span style="color: #888;"> 5</span> <span style="color: #ccc;">又一段</span><span style="background: #6b4c12; color: #fff;">搜索</span><span style="color: #ccc;">内容</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>源码视图</h3>
+      <p>纯文本 Markdown 源码，搜索+高亮匹配最直观</p>
+      <p style="color: #4a9eff;">✅ 必须支持</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-image">
+      <div class="mockup" style="margin: 0;">
+        <div class="mockup-header">预览视图 (Ctrl+2)</div>
+        <div class="mockup-body">
+          <div style="min-height: 120px; padding: 8px;">
+            <h3 style="margin-top: 0; font-size: 18px;">我的文档</h3>
+            <p style="font-size: 14px;">这是<span style="background: #6b4c12; color: #fff; padding: 1px 2px;">搜索</span>文本</p>
+            <p style="font-size: 14px;">又一段<span style="background: #6b4c12; color: #fff; padding: 1px 2px;">搜索</span>内容</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>预览视图</h3>
+      <p>渲染后的 Markdown，匹配的是显示文本而非源码</p>
+      <p style="color: #888;">可选，实现更复杂</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-image">
+      <div class="mockup" style="margin: 0;">
+        <div class="mockup-header">Hybrid 视图 (Ctrl+3)</div>
+        <div class="mockup-body">
+          <div style="min-height: 120px; padding: 8px;">
+            <h3 style="margin-top: 0; font-size: 16px;">我的文档</h3>
+            <div style="font-family: monospace; font-size: 12px; background: #2a2a2a; padding: 4px;">
+              <span style="color: #ccc;">这是</span><span style="background: #6b4c12; color: #fff;">搜索</span><span style="color: #ccc;">文本</span>
+            </div>
+            <p style="font-size: 14px;">又一段<span style="background: #6b4c12; color: #fff; padding: 1px 2px;">搜索</span>内容</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Hybrid 视图</h3>
+      <p>光标所在 block 显示源码，其余渲染显示。搜索可能需要在两种渲染方式间切换</p>
+      <p style="color: #888;">可选，较复杂</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="options">
+    <div class="option" data-choice="source-only" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>仅源码视图</h3>
+        <p>只在源码模式(Ctrl+1)下 Ctrl+F 可用。如果用户在预览/Hybrid 模式按 Ctrl+F，自动切换到源码视图。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="all-views" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>所有视图（推荐）</h3>
+        <p>先在源码视图中实现搜索+高亮替换。预览/Hybrid 视图中的搜索可以后续迭代添加（搜索时 UI 切换到源码模式）。</p>
+      </div>
+    </div>
+  </div>
+</div>

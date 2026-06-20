@@ -1,0 +1,41 @@
+<h2>Mermaid 图表渲染 — 方案对比</h2>
+<p class="subtitle">四种渲染路径，请选择你偏好的方案</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>mermaid.ink 云端渲染</h3>
+      <p>将 Mermaid 语法编码为 URL，请求 <code>mermaid.ink/img/...</code> 获取 SVG/PNG</p>
+      <p><strong>优点：</strong>零依赖、纯 HTTP、SVG/PNG 双格式支持</p>
+      <p><strong>缺点：</strong>需要网络、有延迟、第三方服务依赖</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>本地 mermaid-cli (node)</h3>
+      <p>通过 <code>mermaid-cli</code> 本地命令行渲染为 SVG</p>
+      <p><strong>优点：</strong>离线可用、完整 Mermaid 语法支持</p>
+      <p><strong>缺点：</strong>需要用户安装 Node.js + mermaid-cli、进程调用开销</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>WebView 嵌入 Mermaid.js</h3>
+      <p>在 egui 中嵌入轻量 webview 运行 Mermaid.js</p>
+      <p><strong>优点：</strong>完整支持、实时预览、最新版本</p>
+      <p><strong>缺点：</strong>引入 webview 依赖、平台差异大、包体积增加</p>
+    </div>
+  </div>
+  <div class="option" data-choice="d" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>混合：mermaid.ink + 本地缓存</h3>
+      <p>以 mermaid.ink 为主，本地缓存已渲染的 SVG</p>
+      <p><strong>优点：</strong>首次后缓存加速、离线可用已缓存图表</p>
+      <p><strong>缺点：</strong>首次仍需网络、缓存管理复杂度</p>
+    </div>
+  </div>
+</div>

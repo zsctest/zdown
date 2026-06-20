@@ -1,0 +1,78 @@
+<h2>搜索功能需要哪些能力？</h2>
+<p class="subtitle">Ctrl+F 搜索栏应包含哪些搜索选项和替换能力？</p>
+
+<div class="section">
+  <h3>搜索选项</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="card-body">
+        <h3>🔤 区分大小写 (Aa)</h3>
+        <p>切换按钮，默认关闭。开启后 "Hello" 不会匹配 "hello"。</p>
+        <p style="color: #4a9eff; font-size: 13px;">实现难度：低</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <h3>🔤 全词匹配 (ab|)</h3>
+        <p>切换按钮，默认关闭。开启后搜索 "foo" 不会匹配 "foobar"。</p>
+        <p style="color: #4a9eff; font-size: 13px;">实现难度：低</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <h3>.* 正则表达式</h3>
+        <p>切换按钮，默认关闭。开启后搜索词被解释为正则表达式。</p>
+        <p style="color: #cc0; font-size: 13px;">实现难度：中（需引入 regex crate）</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>替换能力</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="card-body">
+        <h3>🔄 替换当前匹配</h3>
+        <p>替换高亮的当前匹配项，然后跳到下一个匹配。</p>
+        <p style="color: #4a9eff; font-size: 13px;">实现难度：低</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <h3>🔄 替换全部</h3>
+        <p>一次性替换文档中所有匹配项。支持撤销（所有替换作为一个 undo 组）。</p>
+        <p style="color: #4a9eff; font-size: 13px;">实现难度：中</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="options">
+    <div class="option" data-choice="basic" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>基础搜索（仅查找）</h3>
+        <p>文本搜索 + 区分大小写 + 全词匹配。无替换功能。后续迭代再加替换。</p>
+        <p style="color: #888;">MVP，快速可用</p>
+      </div>
+    </div>
+    <div class="option" data-choice="full" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>查找+替换（推荐）</h3>
+        <p>文本搜索 + 区分大小写 + 全词匹配 + 替换/替换全部。正则表达式后续迭代。</p>
+        <p style="color: #4a9eff;">一步到位，功能完整</p>
+      </div>
+    </div>
+    <div class="option" data-choice="all" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>全部功能</h3>
+        <p>文本搜索 + 区分大小写 + 全词匹配 + 正则 + 替换/替换全部。一次性实现所有能力。</p>
+        <p style="color: #cc0;">实现时间较长</p>
+      </div>
+    </div>
+  </div>
+</div>
