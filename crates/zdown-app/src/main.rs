@@ -71,6 +71,8 @@ struct ZdownApp {
     search: SearchState,
     /// 系统已安装的等宽字体列表（缓存）。
     available_fonts: Vec<String>,
+    /// 启动字体是否已注册（确保只初始化一次）。
+    font_registered: bool,
     /// 当前主题模式。
     theme: ThemeMode,
 }
@@ -101,6 +103,7 @@ impl Default for ZdownApp {
             app_config,
             settings_dialog: settings_dialog::SettingsDialog::default(),
             available_fonts: FontProvider::list_monospace_families(),
+            font_registered: false,
             search: SearchState::default(),
             theme,
         }
@@ -111,6 +114,13 @@ impl eframe::App for ZdownApp {
     #[allow(deprecated)]
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+
+        // 启动时注册编辑器字体（只执行一次）
+        if !self.font_registered {
+            let font = &self.app_config.editor_font;
+            FontProvider::register_editor_font(&ctx, &font.family, font.size);
+            self.font_registered = true;
+        }
 
         // 应用当前主题到 egui
         match self.theme {

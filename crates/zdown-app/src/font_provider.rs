@@ -67,9 +67,10 @@ impl FontProvider {
         if family != "monospace" {
             if let Some(ttf_bytes) = Self::load_font_ttf(family) {
                 let font_name = format!("custom_mono_{family}");
-                fonts
-                    .font_data
-                    .insert(font_name.clone(), std::sync::Arc::new(egui::FontData::from_owned(ttf_bytes)));
+                fonts.font_data.insert(
+                    font_name.clone(),
+                    std::sync::Arc::new(egui::FontData::from_owned(ttf_bytes)),
+                );
                 fonts
                     .families
                     .entry(egui::FontFamily::Monospace)
