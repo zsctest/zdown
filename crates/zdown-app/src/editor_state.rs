@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use document_model::{Document, parse};
 use editor_engine::{Command, Editor};
+use spellcheck::{SpellChecker, SpellError};
 use workspace::{RecentFiles, Workspace};
 
 /// 单个标签页：独立编辑器 + 可选文件路径。
@@ -41,6 +42,10 @@ pub struct EditorState {
     pub should_exit: bool,
     /// 状态栏消息（如导出成功/失败），每帧渲染后由 UI 层清除。
     pub status_message: String,
+    /// 拼写检查器（启动时构建一次；None 表示词典加载失败）。
+    pub spell_checker: Option<SpellChecker>,
+    /// 最近一次拼写检查的结果。
+    pub spell_errors: Vec<SpellError>,
 }
 
 /// open / save 等操作的结果。
@@ -199,6 +204,13 @@ impl EditorState {
     /// 空编辑器（包含一个空标签页）。
     pub fn new() -> Self {
         let tab = DocumentTab::empty();
+        let spell_checker = match SpellChecker::new() {
+            Ok(sc) => Some(sc),
+            Err(e) => {
+                tracing::warn!("拼写检查器初始化失败（已禁用）: {e}");
+                None
+            }
+        };
         Self {
             tabs: vec![tab],
             active_tab: 0,
@@ -206,6 +218,8 @@ impl EditorState {
             workspace: Workspace::new(),
             should_exit: false,
             status_message: String::new(),
+            spell_checker,
+            spell_errors: Vec::new(),
         }
     }
 
@@ -279,6 +293,19 @@ impl EditorState {
             }
         }
         (saved, skipped)
+    }
+
+    /// 执行拼写检查（保存文件后由 UI 层调用）。
+    /// 若检查未启用或检查器不可用，清空错误列表。
+    pub fn run_spell_check(&mut self, enabled: bool) {
+        if !enabled {
+            self.spell_errors.clear();
+            return;
+        }
+        if let Some(ref checker) = self.spell_checker {
+            let text = self.editor().to_string();
+            self.spell_errors = checker.check(&text);
+        }
     }
 
     /// 另存为。
