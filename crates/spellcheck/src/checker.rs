@@ -39,14 +39,17 @@ pub fn check(checker: &SpellChecker, text: &str) -> Vec<SpellError> {
 
         // 检测行内代码 `...`
         if bytes[i] == b'`' {
+            let backtick_pos = i;
             i += 1;
             while i < len && bytes[i] != b'`' {
                 i += 1;
             }
             if i < len {
                 i += 1; // 跳过闭合 `
+                continue;
             }
-            continue;
+            // 未闭合反引号：跳过该反引号，作为普通字符继续
+            i = backtick_pos + 1;
         }
 
         // 检测单词起始（字母或撇号）
@@ -177,5 +180,44 @@ mod tests {
         let c = make_checker();
         let errors = c.check("v2 foo123 3d");
         assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn empty_text_returns_empty() {
+        let c = make_checker();
+        let errors = c.check("");
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn unclosed_inline_code_does_not_eat_remaining() {
+        let c = make_checker();
+        // "`helo" 未闭合反引号，"helo" 拼写错误应被标记；"world" 正确、不受影响
+        let errors = c.check("`helo world");
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].word, "helo");
+    }
+
+    #[test]
+    fn all_fenced_code_returns_empty() {
+        let c = make_checker();
+        let errors = c.check("```\nhelo\nwrld\n```");
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn apostrophe_words_are_checked() {
+        let c = make_checker();
+        // "don't" 和 "it's" 都是合法英文缩写，词典应收录
+        let errors = c.check("don't it's");
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn misspelled_apostrophe_word_is_caught() {
+        let c = make_checker();
+        let errors = c.check("dont't");
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].word, "dont't");
     }
 }
