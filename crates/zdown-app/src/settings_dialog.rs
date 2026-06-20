@@ -13,6 +13,7 @@ use eframe::egui;
 enum SettingsTab {
     Css,
     Image,
+    Spell,
 }
 
 /// 设置对话框状态。
@@ -27,6 +28,8 @@ pub struct SettingsDialog {
     local_dir_buffer: String,
     smms_token_buffer: String,
     strategy_buffer: usize, // 0=Local, 1=Base64, 2=SmMs
+    /// 拼写检查开关缓冲区。
+    spell_check_buffer: bool,
 }
 
 impl Default for SettingsDialog {
@@ -38,13 +41,19 @@ impl Default for SettingsDialog {
             local_dir_buffer: "images".to_string(),
             smms_token_buffer: String::new(),
             strategy_buffer: 0,
+            spell_check_buffer: true,
         }
     }
 }
 
 impl SettingsDialog {
     /// 打开对话框，将当前配置填充到编辑缓冲区。
-    pub fn open_dialog(&mut self, current_css: Option<&str>, image_config: &ImageHostingConfig) {
+    pub fn open_dialog(
+        &mut self,
+        current_css: Option<&str>,
+        image_config: &ImageHostingConfig,
+        spell_check_enabled: bool,
+    ) {
         self.open = true;
         self.active_tab = SettingsTab::Css;
         self.css_buffer = current_css.unwrap_or("").to_string();
@@ -55,6 +64,7 @@ impl SettingsDialog {
             ImageStrategy::Base64 => 1,
             ImageStrategy::SmMs => 2,
         };
+        self.spell_check_buffer = spell_check_enabled;
     }
 }
 
@@ -80,6 +90,7 @@ pub fn show_settings_dialog(
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut dialog.active_tab, SettingsTab::Css, "样式");
                 ui.selectable_value(&mut dialog.active_tab, SettingsTab::Image, "图片");
+                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Spell, "拼写");
             });
             ui.separator();
 
@@ -129,6 +140,33 @@ pub fn show_settings_dialog(
                             .size(12.0),
                     );
                 }
+                SettingsTab::Spell => {
+                    ui.label("英文拼写检查：");
+                    ui.add_space(4.0);
+
+                    ui.checkbox(&mut dialog.spell_check_buffer, "启用英文拼写检查");
+
+                    ui.add_space(8.0);
+
+                    ui.label(
+                        egui::RichText::new("拼写检查在保存文件时自动执行。")
+                            .weak()
+                            .size(12.0),
+                    );
+                    ui.label(
+                        egui::RichText::new("错误单词将以红色波浪下划线标记。")
+                            .weak()
+                            .size(12.0),
+                    );
+
+                    ui.add_space(8.0);
+
+                    ui.label(
+                        egui::RichText::new("词典：English (United States) — en_US")
+                            .weak()
+                            .size(12.0),
+                    );
+                }
             }
 
             ui.separator();
@@ -149,6 +187,9 @@ pub fn show_settings_dialog(
                     };
                     app_config.image_hosting.local_dir = dialog.local_dir_buffer.clone();
                     app_config.image_hosting.smms.api_token = dialog.smms_token_buffer.clone();
+
+                    // 拼写检查设置
+                    app_config.spell_check_enabled = dialog.spell_check_buffer;
 
                     if let Err(e) = app_config.save() {
                         tracing::error!("配置保存失败: {e}");
@@ -177,7 +218,7 @@ mod tests {
     #[test]
     fn open_populates_buffer() {
         let mut dialog = SettingsDialog::default();
-        dialog.open_dialog(Some("h1{color:red}"), &Default::default());
+        dialog.open_dialog(Some("h1{color:red}"), &Default::default(), true);
         assert!(dialog.open);
         assert_eq!(dialog.css_buffer, "h1{color:red}");
         assert_eq!(dialog.local_dir_buffer, "images");
@@ -186,7 +227,7 @@ mod tests {
     #[test]
     fn open_with_none_sets_empty_buffer() {
         let mut dialog = SettingsDialog::default();
-        dialog.open_dialog(None, &Default::default());
+        dialog.open_dialog(None, &Default::default(), true);
         assert!(dialog.open);
         assert_eq!(dialog.css_buffer, "");
         assert_eq!(dialog.local_dir_buffer, "images");
@@ -199,5 +240,20 @@ mod tests {
         assert_eq!(dialog.css_buffer, "");
         assert_eq!(dialog.local_dir_buffer, "images");
         assert_eq!(dialog.strategy_buffer, 0);
+    }
+
+    #[test]
+    fn open_dialog_populates_spell_check_buffer() {
+        let mut dialog = SettingsDialog::default();
+        dialog.open_dialog(None, &Default::default(), false);
+        assert!(dialog.open);
+        assert!(!dialog.spell_check_buffer);
+    }
+
+    #[test]
+    fn open_dialog_default_spell_check_enabled() {
+        let mut dialog = SettingsDialog::default();
+        dialog.open_dialog(None, &Default::default(), true);
+        assert!(dialog.spell_check_buffer);
     }
 }

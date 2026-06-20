@@ -104,6 +104,7 @@ fn should_check(word: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
     use super::*;
 
     fn make_checker() -> SpellChecker {

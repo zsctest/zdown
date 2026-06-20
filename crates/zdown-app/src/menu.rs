@@ -56,9 +56,11 @@ pub fn show_menu(
                     } else {
                         let _ = state.save();
                     }
+                    state.run_spell_check(app_config.spell_check_enabled);
                 }
                 if ui.button("另存为... (Ctrl+Shift+S)").clicked() {
                     trigger_save_as(state);
+                    state.run_spell_check(app_config.spell_check_enabled);
                 }
                 if ui.button("保存所有").clicked() {
                     let (saved, skipped) = state.save_all();
@@ -67,6 +69,7 @@ pub fn show_menu(
                         msg.push_str(&format!("，{skipped} 个未命名文件已跳过"));
                     }
                     state.status_message = msg;
+                    state.run_spell_check(app_config.spell_check_enabled);
                 }
                 ui.separator();
                 if ui.button("导出 PDF...").clicked() {
@@ -95,8 +98,11 @@ pub fn show_menu(
                 ui.separator();
 
                 if ui.button("设置...").clicked() {
-                    settings_dialog
-                        .open_dialog(app_config.custom_css.as_deref(), &app_config.image_hosting);
+                    settings_dialog.open_dialog(
+                        app_config.custom_css.as_deref(),
+                        &app_config.image_hosting,
+                        app_config.spell_check_enabled,
+                    );
                     ui.close();
                 }
 
@@ -335,7 +341,12 @@ pub(crate) fn trigger_browse_image(state: &mut EditorState, config: &ImageHostin
 }
 
 /// 处理快捷键。
-pub fn handle_shortcuts(ctx: &egui::Context, state: &mut EditorState, confirm: &mut ConfirmDialog) {
+pub fn handle_shortcuts(
+    ctx: &egui::Context,
+    state: &mut EditorState,
+    confirm: &mut ConfirmDialog,
+    app_config: &AppConfig,
+) {
     let mods = ctx.input(|i| i.modifiers);
 
     // Ctrl+S
@@ -345,10 +356,12 @@ pub fn handle_shortcuts(ctx: &egui::Context, state: &mut EditorState, confirm: &
         } else {
             trigger_save_as(state);
         }
+        state.run_spell_check(app_config.spell_check_enabled);
     }
     // Ctrl+Shift+S
     if mods.ctrl && mods.shift && ctx.input(|i| i.key_pressed(egui::Key::S)) {
         trigger_save_as(state);
+        state.run_spell_check(app_config.spell_check_enabled);
     }
     // Ctrl+N
     if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::N)) {

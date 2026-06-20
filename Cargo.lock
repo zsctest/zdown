@@ -4189,6 +4189,7 @@ name = "spellcheck"
 version = "0.0.0"
 dependencies = [
  "spellbook",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6084,6 +6085,7 @@ dependencies = [
  "markdown_renderer",
  "open",
  "serde_json",
+ "spellcheck",
  "tempfile",
  "tracing",
  "tracing-subscriber",

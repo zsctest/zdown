@@ -76,7 +76,9 @@ pub(crate) fn handle_input(
                     })
                     .is_ok()
                 {
-                    let _ = state.editor_mut().set_cursor(Cursor::new(cursor.line + 1, 0));
+                    let _ = state
+                        .editor_mut()
+                        .set_cursor(Cursor::new(cursor.line + 1, 0));
                 }
             }
             egui::Event::Key {
@@ -107,9 +109,15 @@ pub(crate) fn handle_input(
                 let cursor = state.editor().cursor;
                 if cursor.line > 0 {
                     let target_line = cursor.line - 1;
-                    let max_col = state.editor().buffer.line_len_chars(target_line).unwrap_or(0);
+                    let max_col = state
+                        .editor()
+                        .buffer
+                        .line_len_chars(target_line)
+                        .unwrap_or(0);
                     let new_col = cursor.col.min(max_col);
-                    let _ = state.editor_mut().set_cursor(Cursor::new(target_line, new_col));
+                    let _ = state
+                        .editor_mut()
+                        .set_cursor(Cursor::new(target_line, new_col));
                 }
             }
             egui::Event::Key {
@@ -121,9 +129,15 @@ pub(crate) fn handle_input(
                 let line_count = state.editor().buffer.len_lines();
                 if cursor.line + 1 < line_count {
                     let target_line = cursor.line + 1;
-                    let max_col = state.editor().buffer.line_len_chars(target_line).unwrap_or(0);
+                    let max_col = state
+                        .editor()
+                        .buffer
+                        .line_len_chars(target_line)
+                        .unwrap_or(0);
                     let new_col = cursor.col.min(max_col);
-                    let _ = state.editor_mut().set_cursor(Cursor::new(target_line, new_col));
+                    let _ = state
+                        .editor_mut()
+                        .set_cursor(Cursor::new(target_line, new_col));
                 }
             }
             egui::Event::Key {

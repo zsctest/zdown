@@ -360,8 +360,10 @@ theme = "Dark"
 
     #[test]
     fn spell_check_roundtrip() {
-        let mut config = AppConfig::default();
-        config.spell_check_enabled = false;
+        let config = AppConfig {
+            spell_check_enabled: false,
+            ..Default::default()
+        };
         let toml_str = toml::to_string_pretty(&config).expect("serialize");
         let restored: AppConfig = toml::from_str(&toml_str).expect("deserialize");
         assert!(!restored.spell_check_enabled);

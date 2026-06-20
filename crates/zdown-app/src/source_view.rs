@@ -9,6 +9,7 @@
 
 use eframe::egui;
 use markdown_renderer::SourceHighlighter;
+use spellcheck::SpellError;
 
 use crate::editor_state::EditorState;
 use crate::search_state::SearchState;
@@ -22,8 +23,15 @@ pub fn show_source_view(
     search: &SearchState,
     app_config: &config::ImageHostingConfig,
 ) {
-    let working_dir = state.current_path().and_then(|p| p.parent().map(|d| d.to_path_buf()));
-    crate::input::handle_dropped_images(ui.ctx(), state.editor_mut(), app_config, working_dir.clone());
+    let working_dir = state
+        .current_path()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    crate::input::handle_dropped_images(
+        ui.ctx(),
+        state.editor_mut(),
+        app_config,
+        working_dir.clone(),
+    );
 
     let src = state.editor().to_string();
 
@@ -32,7 +40,9 @@ pub fn show_source_view(
     let focus_id = egui::Id::new(("source_view_input", state.active_tab_index()));
     let input_response = ui.interact(ui.max_rect(), focus_id, egui::Sense::click_and_drag());
     if input_response.has_focus() {
-        let wd = state.current_path().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+        let wd = state
+            .current_path()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
         crate::input::handle_input(&ctx, state, app_config, wd);
     }
     // 点击获取焦点
@@ -58,10 +68,83 @@ pub fn show_source_view(
 
             // 高亮文本 + 光标
             ui.vertical(|ui| {
-                render_text_with_cursor(ui, &src, state.editor().cursor, highlighter, search);
+                render_text_with_cursor(
+                    ui,
+                    &src,
+                    state.editor().cursor,
+                    highlighter,
+                    search,
+                    &state.spell_errors,
+                );
             });
         });
     });
+}
+
+/// 查找指定行中所有拼写错误的列范围。
+fn find_line_spell_errors(
+    src: &str,
+    spell_errors: &[SpellError],
+    line_idx: usize,
+) -> Vec<(usize, usize)> {
+    if spell_errors.is_empty() {
+        return Vec::new();
+    }
+    // 使用 char_indices 计算每行的字节起始位置
+    let mut line_starts: Vec<usize> = vec![0];
+    for (idx, ch) in src.char_indices() {
+        if ch == '\n' {
+            line_starts.push(idx + 1); // 下一行起始在 \n 之后
+        }
+    }
+    let line_starts_with_end = {
+        let mut v = line_starts.clone();
+        v.push(src.len());
+        v
+    };
+
+    let line_start = match line_starts.get(line_idx) {
+        Some(&s) => s,
+        None => return Vec::new(),
+    };
+    let line_end = match line_starts_with_end.get(line_idx + 1) {
+        Some(e) => *e,
+        None => return Vec::new(),
+    };
+
+    let mut ranges = Vec::new();
+    for err in spell_errors {
+        let (err_start, err_end) = err.span;
+        if err_start >= line_start && err_end <= line_end {
+            let col_start = src[line_start..err_start].chars().count();
+            let col_end = col_start + err.word.chars().count();
+            ranges.push((col_start, col_end));
+        }
+    }
+    ranges
+}
+
+/// 绘制红色波浪下划线。
+fn paint_squiggly_underline(
+    painter: &egui::Painter,
+    start: egui::Pos2,
+    end: egui::Pos2,
+    color: egui::Color32,
+) {
+    let step = 3.0;
+    let amp = 2.0;
+    let y_base = start.y + 2.0;
+    let mut points = Vec::new();
+    let mut x = start.x;
+    while x < end.x {
+        let phase = ((x - start.x) / step) as i32;
+        let y = y_base + if phase % 2 == 0 { -amp } else { amp };
+        points.push(egui::pos2(x, y));
+        x += step;
+    }
+    if points.len() >= 2 {
+        painter.add(egui::Shape::line(points, egui::Stroke::new(1.0, color)));
+    }
 }
 
 /// 渲染高亮文本 + 光标矩形。
@@ -71,6 +154,7 @@ fn render_text_with_cursor(
     cursor: Cursor,
     highlighter: Option<&SourceHighlighter>,
     search: &SearchState,
+    spell_errors: &[SpellError],
 ) {
     // 从 egui style 获取等宽字体字号，避免硬编码
     let font_id = ui
@@ -177,6 +261,38 @@ fn render_text_with_cursor(
                 ui.painter()
                     .rect_filled(cursor_rect, 0.0, egui::Color32::from_rgb(200, 200, 200));
             }
+
+            // 绘制拼写错误波浪线
+            let spell_ranges = find_line_spell_errors(src, spell_errors, line_idx);
+            for (col_start, col_end) in spell_ranges {
+                let err_prefix: String = line
+                    .iter()
+                    .flat_map(|(_, t)| t.chars())
+                    .take(col_start)
+                    .collect();
+                let err_text: String = line
+                    .iter()
+                    .flat_map(|(_, t)| t.chars())
+                    .skip(col_start)
+                    .take(col_end - col_start)
+                    .collect();
+                let err_prefix_galley = ui.ctx().fonts_mut(|f| {
+                    f.layout_no_wrap(err_prefix, font_id.clone(), egui::Color32::WHITE)
+                });
+                let err_text_galley = ui.ctx().fonts_mut(|f| {
+                    f.layout_no_wrap(err_text, font_id.clone(), egui::Color32::WHITE)
+                });
+                let squiggly_start =
+                    egui::pos2(rect.min.x + err_prefix_galley.size().x, rect.max.y);
+                let squiggly_end =
+                    egui::pos2(squiggly_start.x + err_text_galley.size().x, rect.max.y);
+                paint_squiggly_underline(
+                    ui.painter(),
+                    squiggly_start,
+                    squiggly_end,
+                    egui::Color32::from_rgb(224, 108, 117), // 红色 #e06c75
+                );
+            }
         }
     } else {
         // fallback：不高亮
@@ -236,6 +352,33 @@ fn render_text_with_cursor(
                 );
                 ui.painter()
                     .rect_filled(cursor_rect, 0.0, egui::Color32::from_rgb(200, 200, 200));
+            }
+
+            // 绘制拼写错误波浪线
+            let spell_ranges = find_line_spell_errors(src, spell_errors, line_idx);
+            for (col_start, col_end) in spell_ranges {
+                let err_prefix: String = line.chars().take(col_start).collect();
+                let err_text: String = line
+                    .chars()
+                    .skip(col_start)
+                    .take(col_end - col_start)
+                    .collect();
+                let err_prefix_galley = ui.ctx().fonts_mut(|f| {
+                    f.layout_no_wrap(err_prefix, font_id.clone(), egui::Color32::WHITE)
+                });
+                let err_text_galley = ui.ctx().fonts_mut(|f| {
+                    f.layout_no_wrap(err_text, font_id.clone(), egui::Color32::WHITE)
+                });
+                let squiggly_start =
+                    egui::pos2(rect.min.x + err_prefix_galley.size().x, rect.max.y);
+                let squiggly_end =
+                    egui::pos2(squiggly_start.x + err_text_galley.size().x, rect.max.y);
+                paint_squiggly_underline(
+                    ui.painter(),
+                    squiggly_start,
+                    squiggly_end,
+                    egui::Color32::from_rgb(224, 108, 117),
+                );
             }
         }
     }

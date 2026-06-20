@@ -15,8 +15,15 @@ pub fn show_hybrid_view(
     cache: &mut markdown_renderer::RenderCache,
     app_config: &config::ImageHostingConfig,
 ) {
-    let working_dir = state.current_path().and_then(|p| p.parent().map(|d| d.to_path_buf()));
-    crate::input::handle_dropped_images(ui.ctx(), state.editor_mut(), app_config, working_dir.clone());
+    let working_dir = state
+        .current_path()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    crate::input::handle_dropped_images(
+        ui.ctx(),
+        state.editor_mut(),
+        app_config,
+        working_dir.clone(),
+    );
 
     let src = state.editor().to_string();
     let cursor_line = state.editor().cursor.line;
@@ -25,7 +32,9 @@ pub fn show_hybrid_view(
     let focus_id = egui::Id::new(("hybrid_view_input", state.active_tab_index()));
     let input_response = ui.interact(ui.max_rect(), focus_id, egui::Sense::click_and_drag());
     if input_response.has_focus() {
-        let wd = state.current_path().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+        let wd = state
+            .current_path()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
         crate::input::handle_input(&ctx, state, app_config, wd);
     }
     if input_response.clicked() {
