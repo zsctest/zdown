@@ -12,6 +12,7 @@ mod search_state;
 mod settings_dialog;
 mod source_view;
 mod tab_bar;
+mod font_provider;
 mod view_mode;
 
 use config::ThemeMode;
