@@ -69,7 +69,7 @@ impl Default for ImageHostingConfig {
 ///
 /// `#[serde(default)]` 确保向后兼容：旧版本配置文件
 /// 缺少新增字段时自动使用 Default 值。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
     /// 自定义 CSS，追加到 HTML 导出的内置样式之后。
@@ -80,6 +80,21 @@ pub struct AppConfig {
     pub theme: ThemeMode,
     /// 图片托管配置。
     pub image_hosting: ImageHostingConfig,
+
+    /// 拼写检查开关。默认启用。
+    #[serde(default = "default_spell_check")]
+    pub spell_check_enabled: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            custom_css: None,
+            theme: ThemeMode::Dark,
+            image_hosting: ImageHostingConfig::default(),
+            spell_check_enabled: true,
+        }
+    }
 }
 
 impl AppConfig {
@@ -127,6 +142,10 @@ impl AppConfig {
     pub fn default_path() -> Option<PathBuf> {
         dirs::config_dir().map(|d| d.join("zdown").join("config.toml"))
     }
+}
+
+fn default_spell_check() -> bool {
+    true
 }
 
 #[cfg(test)]
@@ -297,6 +316,7 @@ mod tests {
                     api_token: "token123".into(),
                 },
             },
+            ..Default::default()
         };
         config.save_to(&path).expect("save");
         let loaded = AppConfig::load_from(&path).expect("load");
@@ -321,5 +341,29 @@ mod tests {
         ));
         assert_eq!(loaded.image_hosting.local_dir, "images");
         cleanup(&path);
+    }
+
+    #[test]
+    fn spell_check_default_enabled() {
+        let config = AppConfig::default();
+        assert!(config.spell_check_enabled);
+    }
+
+    #[test]
+    fn spell_check_deserialize_missing_field_defaults_true() {
+        let toml_str = r#"
+theme = "Dark"
+"#;
+        let config: AppConfig = toml::from_str(toml_str).expect("parse");
+        assert!(config.spell_check_enabled);
+    }
+
+    #[test]
+    fn spell_check_roundtrip() {
+        let mut config = AppConfig::default();
+        config.spell_check_enabled = false;
+        let toml_str = toml::to_string_pretty(&config).expect("serialize");
+        let restored: AppConfig = toml::from_str(&toml_str).expect("deserialize");
+        assert!(!restored.spell_check_enabled);
     }
 }
