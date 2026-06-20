@@ -69,7 +69,7 @@ pub(crate) fn handle_input(
                 ..
             } => {
                 let cursor = state.editor().cursor;
-                if editor
+                if state
                     .apply(Command::Insert {
                         pos: cursor,
                         text: "\n".into(),
@@ -213,8 +213,8 @@ pub(crate) fn handle_dropped_images(
                 } else {
                     format!("\n![{name}]({url})")
                 };
-                let cursor = state.editor().cursor;
-                let _ = state.apply(Command::Insert {
+                let cursor = editor.cursor;
+                let _ = editor.apply(Command::Insert {
                     pos: cursor,
                     text: md_text,
                 });
