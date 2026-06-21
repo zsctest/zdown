@@ -20,3 +20,6 @@ outline-filter-placeholder = 筛选标题...
 outline-filter-count = 匹配 { $count } 项
 outline-copy-toc = 复制为目录 (Markdown)
 outline-toc-copied = 已复制 { $count } 个标题到剪贴板
+
+# 终端
+menu-view-terminal = 终端 (Ctrl+`)

@@ -5,6 +5,7 @@ use fluent_bundle::FluentArgs;
 use i18n::I18n;
 
 use config::{AppConfig, ImageHostingConfig, ThemeMode};
+use terminal_panel::TerminalPanel;
 
 use crate::editor_state::EditorState;
 use crate::settings_dialog::SettingsDialog;
@@ -44,6 +45,7 @@ pub fn show_menu(
     theme: &mut ThemeMode,
     _image_hosting: &ImageHostingConfig,
     i18n: &I18n,
+    terminal: &mut TerminalPanel,
 ) {
     egui::TopBottomPanel::top("menu").show_inside(ui, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -164,6 +166,13 @@ pub fn show_menu(
                         ThemeMode::Dark => ThemeMode::Light,
                         ThemeMode::Light => ThemeMode::Dark,
                     };
+                    ui.close();
+                }
+
+                ui.separator();
+
+                if ui.button(i18n.t("menu-view-terminal")).clicked() {
+                    terminal.toggle(&ui.ctx().clone());
                     ui.close();
                 }
             });

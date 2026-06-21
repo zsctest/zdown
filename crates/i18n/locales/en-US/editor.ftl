@@ -20,3 +20,6 @@ outline-filter-placeholder = Filter headings...
 outline-filter-count = { $count } matched
 outline-copy-toc = Copy as TOC (Markdown)
 outline-toc-copied = { $count } headings copied to clipboard
+
+# Terminal
+menu-view-terminal = Terminal (Ctrl+`)

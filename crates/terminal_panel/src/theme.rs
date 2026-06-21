@@ -243,10 +243,11 @@ pub fn hex_to_color(hex: &str) -> Result<Color32, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use alacritty_terminal::vte::ansi::{Color, NamedColor};
     use alacritty_terminal::vte::ansi;
+    use alacritty_terminal::vte::ansi::{Color, NamedColor};
 
     #[test]
     fn default_palette_has_16_colors() {

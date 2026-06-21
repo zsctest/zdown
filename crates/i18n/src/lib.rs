@@ -113,6 +113,7 @@ impl Default for I18n {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use fluent_bundle::FluentArgs;

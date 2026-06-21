@@ -110,7 +110,7 @@ spellcheck = { path = "crates/spellcheck" }
 i18n = { path = "crates/i18n" }
 
 # ---------- terminal_panel ----------
-alacritty_terminal = "0.26"
+alacritty_terminal = "0.25"
 portable-pty = "0.9"
 
 [profile.release]

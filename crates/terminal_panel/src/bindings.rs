@@ -89,14 +89,9 @@ impl BindingsLayout {
     }
 
     /// 追加绑定（重复项替换为最后一个）。
-    pub fn add_bindings(
-        &mut self,
-        additions: Vec<(Binding<InputKind>, BindingAction)>,
-    ) {
+    pub fn add_bindings(&mut self, additions: Vec<(Binding<InputKind>, BindingAction)>) {
         for (binding, action) in additions {
-            if let Some(pos) =
-                self.bindings.iter().position(|(b, _)| *b == binding)
-            {
+            if let Some(pos) = self.bindings.iter().position(|(b, _)| *b == binding) {
                 self.bindings[pos] = (binding, action);
             } else {
                 self.bindings.push((binding, action));
@@ -177,8 +172,8 @@ fn default_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use egui::{Key, Modifiers};
     use alacritty_terminal::term::TermMode;
+    use egui::{Key, Modifiers};
 
     #[test]
     fn enter_maps_to_cr() {

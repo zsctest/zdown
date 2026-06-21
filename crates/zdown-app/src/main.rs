@@ -22,6 +22,7 @@ use fluent_bundle::FluentArgs;
 use i18n::I18n;
 use menu::ConfirmDialog;
 use search_state::SearchState;
+use terminal_panel::TerminalPanel;
 use view_mode::ViewMode;
 
 fn main() -> eframe::Result {
@@ -77,6 +78,8 @@ struct ZdownApp {
     theme: ThemeMode,
     /// 国际化管理器。
     i18n: I18n,
+    /// 终端面板。
+    terminal: TerminalPanel,
 }
 
 impl Default for ZdownApp {
@@ -113,6 +116,7 @@ impl Default for ZdownApp {
             search: SearchState::default(),
             theme,
             i18n: I18n::with_lang(lang),
+            terminal: TerminalPanel::default(),
         }
     }
 }
@@ -139,6 +143,7 @@ impl eframe::App for ZdownApp {
             &mut self.theme,
             &self.app_config.image_hosting,
             &self.i18n,
+            &mut self.terminal,
         );
 
         // 主题切换时重建 highlighter + 保存配置
@@ -195,6 +200,15 @@ impl eframe::App for ZdownApp {
             } else {
                 self.search.close();
             }
+        }
+
+        // Ctrl+` 切换终端
+        if mods.ctrl
+            && !mods.shift
+            && !mods.alt
+            && ctx.input(|i| i.key_pressed(egui::Key::Backtick))
+        {
+            self.terminal.toggle(&ctx);
         }
 
         // Ctrl+I 浏览插入图片
@@ -474,6 +488,17 @@ impl eframe::App for ZdownApp {
                 }
             }
         });
+
+        // ===== 终端面板 (Ctrl+`) =====
+        if self.terminal.visible {
+            egui::TopBottomPanel::bottom("terminal_panel")
+                .resizable(true)
+                .default_height(self.terminal.height)
+                .min_height(60.0)
+                .show_inside(ui, |ui| {
+                    self.terminal.show(ui);
+                });
+        }
 
         if self.state.should_exit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
