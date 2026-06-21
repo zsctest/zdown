@@ -22,9 +22,6 @@ enum SettingsTab {
 struct KeybindingCapture {
     /// 正在重新绑定的 action。
     action: config::Action,
-    /// 冲突的 action（若有）。
-    #[allow(dead_code)]
-    conflict_with: Option<config::Action>,
 }
 
 /// 设置对话框状态。
@@ -92,16 +89,41 @@ impl SettingsDialog {
 fn key_name_from_egui(key: egui::Key) -> Option<String> {
     use egui::Key;
     let name = match key {
-        Key::A => "A", Key::B => "B", Key::C => "C", Key::D => "D",
-        Key::E => "E", Key::F => "F", Key::G => "G", Key::H => "H",
-        Key::I => "I", Key::J => "J", Key::K => "K", Key::L => "L",
-        Key::M => "M", Key::N => "N", Key::O => "O", Key::P => "P",
-        Key::Q => "Q", Key::R => "R", Key::S => "S", Key::T => "T",
-        Key::U => "U", Key::V => "V", Key::W => "W", Key::X => "X",
-        Key::Y => "Y", Key::Z => "Z",
-        Key::Num0 => "Num0", Key::Num1 => "Num1", Key::Num2 => "Num2",
-        Key::Num3 => "Num3", Key::Num4 => "Num4", Key::Num5 => "Num5",
-        Key::Num6 => "Num6", Key::Num7 => "Num7", Key::Num8 => "Num8",
+        Key::A => "A",
+        Key::B => "B",
+        Key::C => "C",
+        Key::D => "D",
+        Key::E => "E",
+        Key::F => "F",
+        Key::G => "G",
+        Key::H => "H",
+        Key::I => "I",
+        Key::J => "J",
+        Key::K => "K",
+        Key::L => "L",
+        Key::M => "M",
+        Key::N => "N",
+        Key::O => "O",
+        Key::P => "P",
+        Key::Q => "Q",
+        Key::R => "R",
+        Key::S => "S",
+        Key::T => "T",
+        Key::U => "U",
+        Key::V => "V",
+        Key::W => "W",
+        Key::X => "X",
+        Key::Y => "Y",
+        Key::Z => "Z",
+        Key::Num0 => "Num0",
+        Key::Num1 => "Num1",
+        Key::Num2 => "Num2",
+        Key::Num3 => "Num3",
+        Key::Num4 => "Num4",
+        Key::Num5 => "Num5",
+        Key::Num6 => "Num6",
+        Key::Num7 => "Num7",
+        Key::Num8 => "Num8",
         Key::Num9 => "Num9",
         Key::Tab => "Tab",
         Key::Space => "Space",
@@ -117,10 +139,18 @@ fn key_name_from_egui(key: egui::Key) -> Option<String> {
         Key::End => "End",
         Key::PageUp => "PageUp",
         Key::PageDown => "PageDown",
-        Key::F1 => "F1", Key::F2 => "F2", Key::F3 => "F3",
-        Key::F4 => "F4", Key::F5 => "F5", Key::F6 => "F6",
-        Key::F7 => "F7", Key::F8 => "F8", Key::F9 => "F9",
-        Key::F10 => "F10", Key::F11 => "F11", Key::F12 => "F12",
+        Key::F1 => "F1",
+        Key::F2 => "F2",
+        Key::F3 => "F3",
+        Key::F4 => "F4",
+        Key::F5 => "F5",
+        Key::F6 => "F6",
+        Key::F7 => "F7",
+        Key::F8 => "F8",
+        Key::F9 => "F9",
+        Key::F10 => "F10",
+        Key::F11 => "F11",
+        Key::F12 => "F12",
         Key::Minus => "Minus",
         Key::Equals => "Equals",
         Key::Comma => "Comma",
@@ -140,16 +170,41 @@ fn key_name_from_egui(key: egui::Key) -> Option<String> {
 pub(crate) fn key_from_name(name: &str) -> Option<egui::Key> {
     use egui::Key;
     Some(match name {
-        "A" => Key::A, "B" => Key::B, "C" => Key::C, "D" => Key::D,
-        "E" => Key::E, "F" => Key::F, "G" => Key::G, "H" => Key::H,
-        "I" => Key::I, "J" => Key::J, "K" => Key::K, "L" => Key::L,
-        "M" => Key::M, "N" => Key::N, "O" => Key::O, "P" => Key::P,
-        "Q" => Key::Q, "R" => Key::R, "S" => Key::S, "T" => Key::T,
-        "U" => Key::U, "V" => Key::V, "W" => Key::W, "X" => Key::X,
-        "Y" => Key::Y, "Z" => Key::Z,
-        "Num0" => Key::Num0, "Num1" => Key::Num1, "Num2" => Key::Num2,
-        "Num3" => Key::Num3, "Num4" => Key::Num4, "Num5" => Key::Num5,
-        "Num6" => Key::Num6, "Num7" => Key::Num7, "Num8" => Key::Num8,
+        "A" => Key::A,
+        "B" => Key::B,
+        "C" => Key::C,
+        "D" => Key::D,
+        "E" => Key::E,
+        "F" => Key::F,
+        "G" => Key::G,
+        "H" => Key::H,
+        "I" => Key::I,
+        "J" => Key::J,
+        "K" => Key::K,
+        "L" => Key::L,
+        "M" => Key::M,
+        "N" => Key::N,
+        "O" => Key::O,
+        "P" => Key::P,
+        "Q" => Key::Q,
+        "R" => Key::R,
+        "S" => Key::S,
+        "T" => Key::T,
+        "U" => Key::U,
+        "V" => Key::V,
+        "W" => Key::W,
+        "X" => Key::X,
+        "Y" => Key::Y,
+        "Z" => Key::Z,
+        "Num0" => Key::Num0,
+        "Num1" => Key::Num1,
+        "Num2" => Key::Num2,
+        "Num3" => Key::Num3,
+        "Num4" => Key::Num4,
+        "Num5" => Key::Num5,
+        "Num6" => Key::Num6,
+        "Num7" => Key::Num7,
+        "Num8" => Key::Num8,
         "Num9" => Key::Num9,
         "Tab" => Key::Tab,
         "Space" => Key::Space,
@@ -165,10 +220,18 @@ pub(crate) fn key_from_name(name: &str) -> Option<egui::Key> {
         "End" => Key::End,
         "PageUp" => Key::PageUp,
         "PageDown" => Key::PageDown,
-        "F1" => Key::F1, "F2" => Key::F2, "F3" => Key::F3,
-        "F4" => Key::F4, "F5" => Key::F5, "F6" => Key::F6,
-        "F7" => Key::F7, "F8" => Key::F8, "F9" => Key::F9,
-        "F10" => Key::F10, "F11" => Key::F11, "F12" => Key::F12,
+        "F1" => Key::F1,
+        "F2" => Key::F2,
+        "F3" => Key::F3,
+        "F4" => Key::F4,
+        "F5" => Key::F5,
+        "F6" => Key::F6,
+        "F7" => Key::F7,
+        "F8" => Key::F8,
+        "F9" => Key::F9,
+        "F10" => Key::F10,
+        "F11" => Key::F11,
+        "F12" => Key::F12,
         "Minus" => Key::Minus,
         "Equals" => Key::Equals,
         "Comma" => Key::Comma,
@@ -184,10 +247,7 @@ pub(crate) fn key_from_name(name: &str) -> Option<egui::Key> {
 }
 
 /// 处理按键捕获：在设置对话框快捷键标签页中消费按键事件。
-fn handle_keybinding_capture(
-    ctx: &egui::Context,
-    dialog: &mut SettingsDialog,
-) {
+fn handle_keybinding_capture(ctx: &egui::Context, dialog: &mut SettingsDialog) {
     let Some(capture) = dialog.key_capture.as_ref() else {
         return;
     };
@@ -206,9 +266,7 @@ fn handle_keybinding_capture(
     let events = ctx.input(|i| i.events.clone());
     for event in &events {
         if let egui::Event::Key {
-            key,
-            pressed: true,
-            ..
+            key, pressed: true, ..
         } = event
         {
             // 忽略 Escape 键（取消捕获）
@@ -239,10 +297,9 @@ fn handle_keybinding_capture(
                 dialog
                     .keymap_buffer
                     .set_override(capture_action, new_binding);
-                dialog.key_capture = Some(KeybindingCapture {
-                    action: capture_action,
-                    conflict_with: conflict,
-                });
+                // 清除捕获状态，让 UI 立即显示绑定结果
+                // 冲突检测在 Grid 渲染中实时处理
+                dialog.key_capture = None;
             }
             break;
         }
@@ -415,7 +472,6 @@ pub fn show_settings_dialog(
                                         {
                                             dialog.key_capture = Some(KeybindingCapture {
                                                 action: *action,
-                                                conflict_with: None,
                                             });
                                         }
 
@@ -491,7 +547,12 @@ mod tests {
     #[test]
     fn open_populates_buffer() {
         let mut dialog = SettingsDialog::default();
-        dialog.open_dialog(Some("h1{color:red}"), &Default::default(), true, &config::Keymap::default());
+        dialog.open_dialog(
+            Some("h1{color:red}"),
+            &Default::default(),
+            true,
+            &config::Keymap::default(),
+        );
         assert!(dialog.open);
         assert_eq!(dialog.css_buffer, "h1{color:red}");
         assert_eq!(dialog.local_dir_buffer, "images");

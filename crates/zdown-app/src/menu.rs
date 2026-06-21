@@ -5,8 +5,8 @@ use eframe::egui;
 use config::{AppConfig, ImageHostingConfig, ThemeMode};
 
 use crate::editor_state::EditorState;
-use crate::settings_dialog::key_from_name;
 use crate::settings_dialog::SettingsDialog;
+use crate::settings_dialog::key_from_name;
 use crate::view_mode::ViewMode;
 
 /// 待确认的操作类型（用户选 New/Open/Quit 但有未保存修改时）。
@@ -368,9 +368,7 @@ pub fn handle_shortcuts(
 
 /// 判断 egui 修饰键是否匹配绑定要求的修饰键。
 fn mods_match(actual: &egui::Modifiers, expected: &config::Modifiers) -> bool {
-    actual.ctrl == expected.ctrl
-        && actual.shift == expected.shift
-        && actual.alt == expected.alt
+    actual.ctrl == expected.ctrl && actual.shift == expected.shift && actual.alt == expected.alt
 }
 
 /// 根据 action 分发执行具体操作。
