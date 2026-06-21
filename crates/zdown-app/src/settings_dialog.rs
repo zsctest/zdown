@@ -7,6 +7,7 @@
 
 use config::{AppConfig, ImageHostingConfig, ImageStrategy};
 use eframe::egui;
+use i18n::I18n;
 
 /// 设置对话框标签页。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -293,8 +294,6 @@ fn handle_keybinding_capture(ctx: &egui::Context, dialog: &mut SettingsDialog) {
                 dialog
                     .keymap_buffer
                     .set_override(capture_action, new_binding);
-                // 清除捕获状态，让 UI 立即显示绑定结果
-                // 冲突检测在 Grid 渲染中实时处理
                 dialog.key_capture = None;
             }
             break;
@@ -307,6 +306,7 @@ pub fn show_settings_dialog(
     ctx: &egui::Context,
     app_config: &mut AppConfig,
     dialog: &mut SettingsDialog,
+    i18n: &mut I18n,
 ) {
     if !dialog.open {
         return;
@@ -317,81 +317,94 @@ pub fn show_settings_dialog(
     let mut close_this = false;
     let mut new_css = dialog.css_buffer.clone();
 
-    egui::Window::new("设置")
+    egui::Window::new(i18n.t("settings-title"))
         .collapsible(false)
         .resizable(true)
-        .min_size(egui::vec2(480.0, 350.0))
+        .min_size(egui::vec2(480.0, 380.0))
         .show(ctx, |ui| {
+            // 语言选择器
+            ui.horizontal(|ui| {
+                ui.label(i18n.t("settings-language-label"));
+                egui::ComboBox::from_id_salt("lang_selector")
+                    .selected_text(i18n.lang().display_name())
+                    .show_ui(ui, |ui| {
+                        for lang in &[i18n::Lang::ZhCN, i18n::Lang::EnUS] {
+                            let label = lang.display_name();
+                            if ui.selectable_label(i18n.lang() == *lang, label).clicked() {
+                                i18n.set_lang(*lang);
+                                app_config.lang = lang.as_str().to_string();
+                            }
+                        }
+                    });
+            });
+            ui.separator();
+
             // 标签栏
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Css, "样式");
-                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Image, "图片");
-                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Spell, "拼写");
-                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Keybind, "快捷键");
+                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Css, i18n.t("settings-tab-css"));
+                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Image, i18n.t("settings-tab-image"));
+                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Spell, i18n.t("settings-tab-spell"));
+                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Keybind, i18n.t("settings-tab-keybind"));
             });
             ui.separator();
 
             match dialog.active_tab {
                 SettingsTab::Css => {
-                    // === 原有 CSS 编辑 UI ===
-                    ui.label("自定义 CSS（追加到内置样式之后，留空表示不使用）：");
+                    ui.label(i18n.t("settings-css-label"));
                     ui.add_space(4.0);
 
                     ui.add_sized(
-                        [480.0, 300.0],
+                        [480.0, 280.0],
                         egui::TextEdit::multiline(&mut new_css)
                             .font(egui::TextStyle::Monospace)
                             .desired_width(f32::INFINITY)
-                            .hint_text(
-                                "/* 在此输入自定义 CSS，例如 */\nh1 { color: #2196F3; }\nbody { max-width: 900px; }",
-                            ),
+                            .hint_text(i18n.t("settings-css-hint")),
                     );
                 }
                 SettingsTab::Image => {
-                    // === 图片设置 UI ===
-                    ui.label("默认存储策略：");
+                    ui.label(i18n.t("settings-image-strategy-label"));
                     ui.horizontal(|ui| {
-                        ui.selectable_value(&mut dialog.strategy_buffer, 0, "本地");
-                        ui.selectable_value(&mut dialog.strategy_buffer, 1, "Base64");
-                        ui.selectable_value(&mut dialog.strategy_buffer, 2, "SM.MS");
+                        ui.selectable_value(&mut dialog.strategy_buffer, 0, i18n.t("settings-image-local"));
+                        ui.selectable_value(&mut dialog.strategy_buffer, 1, i18n.t("settings-image-base64"));
+                        ui.selectable_value(&mut dialog.strategy_buffer, 2, i18n.t("settings-image-smms"));
                     });
                     ui.add_space(8.0);
 
                     // 本地目录
-                    ui.label("本地图片目录：");
+                    ui.label(i18n.t("settings-image-local-dir-label"));
                     ui.text_edit_singleline(&mut dialog.local_dir_buffer);
                     ui.add_space(8.0);
 
                     // SM.MS Token
-                    ui.label("SM.MS API Token：");
+                    ui.label(i18n.t("settings-image-smms-token-label"));
                     ui.horizontal(|ui| {
                         ui.text_edit_singleline(&mut dialog.smms_token_buffer);
-                        if ui.button("获取 Token").clicked() {
+                        if ui.button(i18n.t("settings-image-get-token")).clicked() {
                             let _ = open::that("https://sm.ms/home/apitoken");
                         }
                     });
                     ui.add_space(4.0);
                     ui.label(
-                        egui::RichText::new("无 Token 也可上传，但有数量限制。注册后在网站获取。")
+                        egui::RichText::new(i18n.t("settings-image-token-hint"))
                             .weak()
                             .size(12.0),
                     );
                 }
                 SettingsTab::Spell => {
-                    ui.label("英文拼写检查：");
+                    ui.label(i18n.t("settings-spell-label"));
                     ui.add_space(4.0);
 
-                    ui.checkbox(&mut dialog.spell_check_buffer, "启用英文拼写检查");
+                    ui.checkbox(&mut dialog.spell_check_buffer, i18n.t("settings-spell-enable"));
 
                     ui.add_space(8.0);
 
                     ui.label(
-                        egui::RichText::new("拼写检查在保存文件时自动执行。")
+                        egui::RichText::new(i18n.t("settings-spell-hint-save"))
                             .weak()
                             .size(12.0),
                     );
                     ui.label(
-                        egui::RichText::new("错误单词将以红色波浪下划线标记。")
+                        egui::RichText::new(i18n.t("settings-spell-hint-underline"))
                             .weak()
                             .size(12.0),
                     );
@@ -399,16 +412,16 @@ pub fn show_settings_dialog(
                     ui.add_space(8.0);
 
                     ui.label(
-                        egui::RichText::new("词典：English (United States) \u{2014} en_US")
+                        egui::RichText::new(i18n.t("settings-spell-dict"))
                             .weak()
                             .size(12.0),
                     );
                 }
                 SettingsTab::Keybind => {
                     ui.horizontal(|ui| {
-                        ui.label("点击快捷键单元格后按下新组合键，Esc 取消");
+                        ui.label(i18n.t("settings-keybind-hint"));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("恢复全部默认").clicked() {
+                            if ui.button(i18n.t("settings-keybind-reset-all")).clicked() {
                                 dialog.keymap_buffer.clear_all();
                                 dialog.key_capture = None;
                             }
@@ -417,15 +430,15 @@ pub fn show_settings_dialog(
                     ui.add_space(4.0);
 
                     egui::ScrollArea::vertical()
-                        .max_height(320.0)
+                        .max_height(280.0)
                         .show(ui, |ui| {
                             egui::Grid::new("keybind_grid")
                                 .striped(true)
                                 .min_col_width(120.0)
                                 .show(ui, |ui| {
                                     // 表头
-                                    ui.label(egui::RichText::new("操作").strong());
-                                    ui.label(egui::RichText::new("快捷键").strong());
+                                    ui.label(egui::RichText::new(i18n.t("settings-keybind-header-action")).strong());
+                                    ui.label(egui::RichText::new(i18n.t("settings-keybind-header-shortcut")).strong());
                                     ui.label("");
                                     ui.end_row();
 
@@ -442,13 +455,13 @@ pub fn show_settings_dialog(
                                             .detect_conflict(action, &binding)
                                             .is_some();
 
-                                        ui.label(action.display_name());
+                                        ui.label(i18n.t(action.display_name()));
 
                                         // 快捷键单元格
                                         let cell_text = if is_capturing {
-                                            "\u{2318} 按下新快捷键..."
+                                            i18n.t("settings-keybind-capturing")
                                         } else {
-                                            &binding.display()
+                                            binding.display()
                                         };
 
                                         let cell_rich = if is_capturing {
@@ -456,7 +469,7 @@ pub fn show_settings_dialog(
                                                 .color(egui::Color32::from_rgb(100, 200, 255))
                                                 .strong()
                                         } else if has_conflict {
-                                            egui::RichText::new(format!("\u{26A0} {}", cell_text))
+                                            egui::RichText::new(format!("{} {}", i18n.t("settings-keybind-conflict"), cell_text))
                                                 .color(egui::Color32::RED)
                                         } else {
                                             egui::RichText::new(cell_text).monospace()
@@ -474,7 +487,10 @@ pub fn show_settings_dialog(
                                         // 恢复按钮
                                         let is_modified = dialog.keymap_buffer.overrides.contains_key(action);
                                         if is_modified {
-                                            if ui.button("\u{21B6}").on_hover_text("恢复默认").clicked() {
+                                            if ui.button(i18n.t("settings-keybind-reset"))
+                                                .on_hover_text(i18n.t("settings-keybind-restore-tooltip"))
+                                                .clicked()
+                                            {
                                                 dialog.keymap_buffer.clear_override(action);
                                                 if is_capturing {
                                                     dialog.key_capture = None;
@@ -494,7 +510,7 @@ pub fn show_settings_dialog(
             ui.separator();
 
             ui.horizontal(|ui| {
-                if ui.button("保存").clicked() {
+                if ui.button(i18n.t("settings-btn-save")).clicked() {
                     // CSS 设置
                     app_config.custom_css = if new_css.trim().is_empty() {
                         None
@@ -523,7 +539,7 @@ pub fn show_settings_dialog(
                     }
                     close_this = true;
                 }
-                if ui.button("取消").clicked() {
+                if ui.button(i18n.t("settings-btn-cancel")).clicked() {
                     close_this = true;
                 }
             });

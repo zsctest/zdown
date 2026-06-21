@@ -5,6 +5,8 @@ use std::collections::BTreeSet;
 use document_model::ast::{Block, Document, Inline};
 use editor_engine::Cursor;
 use eframe::egui;
+use fluent_bundle::FluentArgs;
+use i18n::I18n;
 
 use crate::editor_state::EditorState;
 
@@ -30,19 +32,21 @@ pub struct OutlineFoldState {
 }
 
 /// 将行内节点转换为纯文本（去除内联标记）。
-fn inlines_to_plain(inlines: &[Inline]) -> String {
+fn inlines_to_plain(inlines: &[Inline], i18n: &I18n) -> String {
     let mut text = String::new();
     for inline in inlines {
         match inline {
             Inline::Text(s) => text.push_str(s),
-            Inline::Emph(inner) => text.push_str(&inlines_to_plain(inner)),
-            Inline::Strong(inner) => text.push_str(&inlines_to_plain(inner)),
+            Inline::Emph(inner) => text.push_str(&inlines_to_plain(inner, i18n)),
+            Inline::Strong(inner) => text.push_str(&inlines_to_plain(inner, i18n)),
             Inline::Code(s) => text.push_str(s),
             Inline::Link {
                 text: link_text, ..
-            } => text.push_str(&inlines_to_plain(link_text)),
+            } => text.push_str(&inlines_to_plain(link_text, i18n)),
             Inline::Image { alt, .. } => {
-                text.push_str("[图片: ");
+                text.push('[');
+                text.push_str(&i18n.t("outline-image-prefix"));
+                text.push(' ');
                 text.push_str(alt);
                 text.push(']');
             }
@@ -55,14 +59,14 @@ fn inlines_to_plain(inlines: &[Inline]) -> String {
 }
 
 /// 从 Document AST 提取所有标题项。
-pub fn extract_outline(doc: &Document) -> Vec<OutlineItem> {
+pub fn extract_outline(doc: &Document, i18n: &I18n) -> Vec<OutlineItem> {
     doc.blocks
         .iter()
         .filter_map(|bws| match &bws.block {
             Block::Heading(h) => {
-                let text = inlines_to_plain(&h.inlines);
+                let text = inlines_to_plain(&h.inlines, i18n);
                 let text = if text.is_empty() {
-                    "(空标题)".to_string()
+                    i18n.t("outline-empty-heading")
                 } else {
                     text
                 };
@@ -166,11 +170,14 @@ pub fn show_outline_panel(
     ui: &mut egui::Ui,
     state: &mut EditorState,
     fold_state: &mut OutlineFoldState,
+    i18n: &I18n,
 ) {
     let doc = state.current_doc();
-    let items = extract_outline(&doc);
+    let items = extract_outline(&doc, i18n);
 
-    ui.heading(format!("📑 大纲 ({})", items.len()));
+    let mut args = FluentArgs::new();
+    args.set("count", items.len() as i64);
+    ui.heading(i18n.tr("outline-heading", Some(&args)));
 
     // 检测文档结构变化，若指纹不匹配则重置折叠状态
     let fp = compute_outline_fingerprint(&items);
@@ -182,7 +189,7 @@ pub fn show_outline_panel(
     fold_state.collapsed.retain(|&i| i < items.len());
 
     if items.is_empty() {
-        ui.label(egui::RichText::new("（无标题）").weak());
+        ui.label(egui::RichText::new(i18n.t("outline-empty")).weak());
         return;
     }
 
@@ -268,10 +275,14 @@ mod tests {
         }
     }
 
+    fn i18n_zh() -> I18n {
+        I18n::with_lang(i18n::Lang::ZhCN)
+    }
+
     #[test]
     fn extract_outline_empty_doc() {
         let doc = doc_from_blocks(vec![]);
-        assert_eq!(extract_outline(&doc), vec![]);
+        assert_eq!(extract_outline(&doc, &i18n_zh()), vec![]);
     }
 
     #[test]
@@ -284,7 +295,7 @@ mod tests {
             0,
             0,
         )]);
-        let items = extract_outline(&doc);
+        let items = extract_outline(&doc, &i18n_zh());
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].level, 1);
         assert_eq!(items[0].text, "简介");
@@ -319,7 +330,7 @@ mod tests {
                 5,
             ),
         ]);
-        let items = extract_outline(&doc);
+        let items = extract_outline(&doc, &i18n_zh());
         assert_eq!(items.len(), 3);
         assert_eq!(items[0].level, 1);
         assert_eq!(items[1].level, 2);
@@ -336,7 +347,7 @@ mod tests {
             0,
             0,
         )]);
-        assert_eq!(extract_outline(&doc), vec![]);
+        assert_eq!(extract_outline(&doc, &i18n_zh()), vec![]);
     }
 
     #[test]
@@ -357,7 +368,7 @@ mod tests {
             0,
             0,
         )]);
-        let items = extract_outline(&doc);
+        let items = extract_outline(&doc, &i18n_zh());
         assert_eq!(items[0].text, "重要：参考");
     }
 
@@ -371,8 +382,8 @@ mod tests {
             3,
             3,
         )]);
-        let items = extract_outline(&doc);
-        assert_eq!(items[0].text, "(空标题)");
+        let items = extract_outline(&doc, &i18n_zh());
+        assert_eq!(items[0].text, "（空标题）");
     }
 
     #[test]
@@ -403,7 +414,7 @@ mod tests {
                 3,
             ),
         ]);
-        let items = extract_outline(&doc);
+        let items = extract_outline(&doc, &i18n_zh());
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].text, "标题");
         assert_eq!(items[1].text, "副标题");
