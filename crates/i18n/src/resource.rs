@@ -1,4 +1,8 @@
 //! FTL 资源加载：通过 include_str! 在编译时嵌入，构建 FluentBundle。
+//!
+//! 静态 FTL 文件在编译期解析，语法错误应尽早暴露 —— 这是 expect 的合理场景。
+
+#![allow(clippy::expect_used)]
 
 use fluent_bundle::{FluentBundle, FluentResource};
 use unic_langid::langid;

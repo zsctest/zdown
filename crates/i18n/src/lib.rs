@@ -26,7 +26,8 @@ impl Lang {
     }
 
     /// 从字符串解析语言（不匹配时回退到中文）。
-    pub fn parse(s: &str) -> Self {
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Self {
         match s {
             "en-US" => Self::EnUS,
             _ => Self::ZhCN,
@@ -200,9 +201,9 @@ mod tests {
 
     #[test]
     fn lang_as_str_roundtrip() {
-        assert_eq!(Lang::parse("zh-CN"), Lang::ZhCN);
-        assert_eq!(Lang::parse("en-US"), Lang::EnUS);
-        assert_eq!(Lang::parse("unknown"), Lang::ZhCN);
+        assert_eq!(Lang::from_str("zh-CN"), Lang::ZhCN);
+        assert_eq!(Lang::from_str("en-US"), Lang::EnUS);
+        assert_eq!(Lang::from_str("unknown"), Lang::ZhCN);
     }
 
     #[test]
