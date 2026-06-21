@@ -232,7 +232,12 @@ impl eframe::App for ZdownApp {
             .default_width(200.0)
             .min_width(60.0)
             .show_inside(ui, |ui| {
-                outline_view::show_outline_panel(ui, &mut self.state, &mut self.fold_state, &self.i18n);
+                outline_view::show_outline_panel(
+                    ui,
+                    &mut self.state,
+                    &mut self.fold_state,
+                    &self.i18n,
+                );
             });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -363,7 +368,10 @@ impl eframe::App for ZdownApp {
                             );
 
                             if ui
-                                .add(egui::Button::new(self.i18n.t("search-replace-btn")).min_size(egui::vec2(48.0, 16.0)))
+                                .add(
+                                    egui::Button::new(self.i18n.t("search-replace-btn"))
+                                        .min_size(egui::vec2(48.0, 16.0)),
+                                )
                                 .clicked()
                             {
                                 if let Some(m) = self.search.current_match_pos().cloned() {
@@ -390,7 +398,10 @@ impl eframe::App for ZdownApp {
                             }
 
                             if ui
-                                .add(egui::Button::new(self.i18n.t("search-replace-all")).min_size(egui::vec2(48.0, 16.0)))
+                                .add(
+                                    egui::Button::new(self.i18n.t("search-replace-all"))
+                                        .min_size(egui::vec2(48.0, 16.0)),
+                                )
                                 .clicked()
                             {
                                 let count = self.search.matches.len();
@@ -414,7 +425,8 @@ impl eframe::App for ZdownApp {
                                 self.search.close();
                                 let mut args = FluentArgs::new();
                                 args.set("count", count as i64);
-                                self.state.status_message = self.i18n.tr("status-replaced-count", Some(&args));
+                                self.state.status_message =
+                                    self.i18n.tr("status-replaced-count", Some(&args));
                             }
                         });
                     });
@@ -457,7 +469,11 @@ impl eframe::App for ZdownApp {
         }
 
         // 更新窗口标题（只在变化时发送，避免每帧触发窗口管理器）
-        let title = format!("{} [{}]", self.state.title(), self.i18n.t(self.view_mode.label()));
+        let title = format!(
+            "{} [{}]",
+            self.state.title(),
+            self.i18n.t(self.view_mode.label())
+        );
         if title != self.last_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;

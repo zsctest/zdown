@@ -44,7 +44,10 @@ pub fn pick_save_file_html(title: &str) -> Option<PathBuf> {
 /// 弹出打开图片文件对话框。用户取消或环境不支持时返回 `None`。
 pub fn pick_open_image(title: &str) -> Option<PathBuf> {
     rfd::FileDialog::new()
-        .add_filter("Image", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"])
+        .add_filter(
+            "Image",
+            &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
+        )
         .set_title(title)
         .pick_file()
 }

@@ -341,10 +341,26 @@ pub fn show_settings_dialog(
 
             // 标签栏
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Css, i18n.t("settings-tab-css"));
-                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Image, i18n.t("settings-tab-image"));
-                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Spell, i18n.t("settings-tab-spell"));
-                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Keybind, i18n.t("settings-tab-keybind"));
+                ui.selectable_value(
+                    &mut dialog.active_tab,
+                    SettingsTab::Css,
+                    i18n.t("settings-tab-css"),
+                );
+                ui.selectable_value(
+                    &mut dialog.active_tab,
+                    SettingsTab::Image,
+                    i18n.t("settings-tab-image"),
+                );
+                ui.selectable_value(
+                    &mut dialog.active_tab,
+                    SettingsTab::Spell,
+                    i18n.t("settings-tab-spell"),
+                );
+                ui.selectable_value(
+                    &mut dialog.active_tab,
+                    SettingsTab::Keybind,
+                    i18n.t("settings-tab-keybind"),
+                );
             });
             ui.separator();
 
@@ -364,9 +380,21 @@ pub fn show_settings_dialog(
                 SettingsTab::Image => {
                     ui.label(i18n.t("settings-image-strategy-label"));
                     ui.horizontal(|ui| {
-                        ui.selectable_value(&mut dialog.strategy_buffer, 0, i18n.t("settings-image-local"));
-                        ui.selectable_value(&mut dialog.strategy_buffer, 1, i18n.t("settings-image-base64"));
-                        ui.selectable_value(&mut dialog.strategy_buffer, 2, i18n.t("settings-image-smms"));
+                        ui.selectable_value(
+                            &mut dialog.strategy_buffer,
+                            0,
+                            i18n.t("settings-image-local"),
+                        );
+                        ui.selectable_value(
+                            &mut dialog.strategy_buffer,
+                            1,
+                            i18n.t("settings-image-base64"),
+                        );
+                        ui.selectable_value(
+                            &mut dialog.strategy_buffer,
+                            2,
+                            i18n.t("settings-image-smms"),
+                        );
                     });
                     ui.add_space(8.0);
 
@@ -394,7 +422,10 @@ pub fn show_settings_dialog(
                     ui.label(i18n.t("settings-spell-label"));
                     ui.add_space(4.0);
 
-                    ui.checkbox(&mut dialog.spell_check_buffer, i18n.t("settings-spell-enable"));
+                    ui.checkbox(
+                        &mut dialog.spell_check_buffer,
+                        i18n.t("settings-spell-enable"),
+                    );
 
                     ui.add_space(8.0);
 
@@ -437,8 +468,18 @@ pub fn show_settings_dialog(
                                 .min_col_width(120.0)
                                 .show(ui, |ui| {
                                     // 表头
-                                    ui.label(egui::RichText::new(i18n.t("settings-keybind-header-action")).strong());
-                                    ui.label(egui::RichText::new(i18n.t("settings-keybind-header-shortcut")).strong());
+                                    ui.label(
+                                        egui::RichText::new(
+                                            i18n.t("settings-keybind-header-action"),
+                                        )
+                                        .strong(),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new(
+                                            i18n.t("settings-keybind-header-shortcut"),
+                                        )
+                                        .strong(),
+                                    );
                                     ui.label("");
                                     ui.end_row();
 
@@ -469,26 +510,36 @@ pub fn show_settings_dialog(
                                                 .color(egui::Color32::from_rgb(100, 200, 255))
                                                 .strong()
                                         } else if has_conflict {
-                                            egui::RichText::new(format!("{} {}", i18n.t("settings-keybind-conflict"), cell_text))
-                                                .color(egui::Color32::RED)
+                                            egui::RichText::new(format!(
+                                                "{} {}",
+                                                i18n.t("settings-keybind-conflict"),
+                                                cell_text
+                                            ))
+                                            .color(egui::Color32::RED)
                                         } else {
                                             egui::RichText::new(cell_text).monospace()
                                         };
 
                                         if ui
-                                            .add(egui::Button::new(cell_rich).min_size(egui::vec2(160.0, 0.0)))
+                                            .add(
+                                                egui::Button::new(cell_rich)
+                                                    .min_size(egui::vec2(160.0, 0.0)),
+                                            )
                                             .clicked()
                                         {
-                                            dialog.key_capture = Some(KeybindingCapture {
-                                                action: *action,
-                                            });
+                                            dialog.key_capture =
+                                                Some(KeybindingCapture { action: *action });
                                         }
 
                                         // 恢复按钮
-                                        let is_modified = dialog.keymap_buffer.overrides.contains_key(action);
+                                        let is_modified =
+                                            dialog.keymap_buffer.overrides.contains_key(action);
                                         if is_modified {
-                                            if ui.button(i18n.t("settings-keybind-reset"))
-                                                .on_hover_text(i18n.t("settings-keybind-restore-tooltip"))
+                                            if ui
+                                                .button(i18n.t("settings-keybind-reset"))
+                                                .on_hover_text(
+                                                    i18n.t("settings-keybind-restore-tooltip"),
+                                                )
                                                 .clicked()
                                             {
                                                 dialog.keymap_buffer.clear_override(action);
