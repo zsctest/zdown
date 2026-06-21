@@ -174,24 +174,24 @@ impl Action {
         }
     }
 
-    /// 返回用户可读的动作名称。
+    /// 返回此动作的 FTL 翻译 key（由调用方通过 i18n 翻译）。
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::Save => "保存",
-            Self::SaveAs => "另存为",
-            Self::NewFile => "新建文件",
-            Self::Open => "打开文件",
-            Self::CloseTab => "关闭标签",
-            Self::NextTab => "下一个标签",
-            Self::PrevTab => "上一个标签",
-            Self::MoveTabLeft => "左移标签",
-            Self::MoveTabRight => "右移标签",
-            Self::Undo => "撤销",
-            Self::Redo => "重做",
-            Self::ViewSource => "源码视图",
-            Self::ViewPreview => "预览视图",
-            Self::ViewHybrid => "混合视图",
-            Self::ToggleTheme => "切换主题",
+            Self::Save => "action-save",
+            Self::SaveAs => "action-save-as",
+            Self::NewFile => "action-new-file",
+            Self::Open => "action-open",
+            Self::CloseTab => "action-close-tab",
+            Self::NextTab => "action-next-tab",
+            Self::PrevTab => "action-prev-tab",
+            Self::MoveTabLeft => "action-move-tab-left",
+            Self::MoveTabRight => "action-move-tab-right",
+            Self::Undo => "action-undo",
+            Self::Redo => "action-redo",
+            Self::ViewSource => "action-view-source",
+            Self::ViewPreview => "action-view-preview",
+            Self::ViewHybrid => "action-view-hybrid",
+            Self::ToggleTheme => "action-toggle-theme",
         }
     }
 }
@@ -492,7 +492,21 @@ mod tests {
     fn action_display_name_non_empty() {
         for action in Action::all() {
             let name = action.display_name();
-            assert!(!name.is_empty(), "{action:?} display_name 为空");
+            assert!(!name.is_empty(), "{action:?} display_name is empty");
+        }
+    }
+
+    #[test]
+    fn display_name_returns_ftl_keys() {
+        assert_eq!(Action::Save.display_name(), "action-save");
+        assert_eq!(Action::Undo.display_name(), "action-undo");
+        // 确保所有 action 都有对应的 FTL key
+        for action in Action::all() {
+            let key = action.display_name();
+            assert!(
+                key.starts_with("action-"),
+                "Key {key} should start with 'action-'"
+            );
         }
     }
 

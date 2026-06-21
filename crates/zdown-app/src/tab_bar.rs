@@ -1,13 +1,19 @@
 //! 标签栏 UI：显示打开的文件标签页，支持切换、关闭、脏标记和右键菜单。
 
 use eframe::egui;
+use i18n::I18n;
 
 use crate::editor_state::EditorState;
 use crate::menu::{ConfirmDialog, PendingAction};
 
 /// 渲染标签栏（位于菜单栏下方）。
 #[allow(deprecated)]
-pub fn show_tab_bar(ui: &mut egui::Ui, state: &mut EditorState, confirm: &mut ConfirmDialog) {
+pub fn show_tab_bar(
+    ui: &mut egui::Ui,
+    state: &mut EditorState,
+    confirm: &mut ConfirmDialog,
+    i18n: &I18n,
+) {
     egui::TopBottomPanel::top("tab_bar").show_inside(ui, |ui| {
         let active = state.active_tab_index();
         let tab_count = state.tab_count();
@@ -52,16 +58,17 @@ pub fn show_tab_bar(ui: &mut egui::Ui, state: &mut EditorState, confirm: &mut Co
                         let tab_idx = i;
                         let has_path_for_menu = has_path;
                         response.context_menu(|ui| {
-                            if ui.button("关闭其他").clicked() {
+                            if ui.button(i18n.t("tab-close-others")).clicked() {
                                 state.close_other_tabs(tab_idx);
                                 ui.close();
                             }
-                            if state.tab_count() > tab_idx + 1 && ui.button("关闭右侧").clicked()
+                            if state.tab_count() > tab_idx + 1
+                                && ui.button(i18n.t("tab-close-right")).clicked()
                             {
                                 state.close_tabs_to_right(tab_idx);
                                 ui.close();
                             }
-                            if has_path_for_menu && ui.button("复制路径").clicked() {
+                            if has_path_for_menu && ui.button(i18n.t("tab-copy-path")).clicked() {
                                 if let Some(ref path) = state.tabs()[tab_idx].path {
                                     ui.ctx().copy_text(path.display().to_string());
                                 }

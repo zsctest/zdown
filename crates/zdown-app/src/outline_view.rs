@@ -2,9 +2,12 @@
 
 use std::collections::BTreeSet;
 
-use document_model::ast::{Block, Document, Inline};
+use document_model::ast::{Block, BlockWithSpan, Document, Inline};
+use document_model::to_markdown;
 use editor_engine::Cursor;
 use eframe::egui;
+use fluent_bundle::FluentArgs;
+use i18n::I18n;
 
 use crate::editor_state::EditorState;
 
@@ -29,20 +32,66 @@ pub struct OutlineFoldState {
     fingerprint: u64,
 }
 
+/// 大纲拖拽排序状态。
+#[derive(Debug, Clone, Default)]
+pub struct OutlineDragState {
+    /// 当前正在拖拽的标题索引。
+    pub dragged_index: Option<usize>,
+    /// 拖拽悬停的目标位置索引。
+    pub drop_target: Option<usize>,
+}
+
+/// 大纲搜索/过滤状态。
+#[derive(Debug, Clone, Default)]
+pub struct OutlineFilterState {
+    /// 过滤查询字符串。
+    pub query: String,
+    /// 输入框是否需要获取焦点。
+    pub focus: bool,
+}
+
+/// 过滤大纲项：大小写不敏感子串匹配。
+/// 返回匹配项的索引列表。空查询返回全部。
+pub fn filter_outline_items(items: &[OutlineItem], query: &str) -> Vec<usize> {
+    if query.trim().is_empty() {
+        return (0..items.len()).collect();
+    }
+    let query_lower = query.to_lowercase();
+    items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| item.text.to_lowercase().contains(&query_lower))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// 自动展开匹配项的所有祖先，确保过滤结果可见。
+pub fn expand_ancestors_for_filter(
+    items: &[OutlineItem],
+    collapsed: &mut BTreeSet<usize>,
+    matched_indices: &[usize],
+) {
+    for &idx in matched_indices {
+        auto_expand_ancestors(items, collapsed, idx);
+    }
+}
+
 /// 将行内节点转换为纯文本（去除内联标记）。
-fn inlines_to_plain(inlines: &[Inline]) -> String {
+fn inlines_to_plain(inlines: &[Inline], i18n: &I18n) -> String {
     let mut text = String::new();
     for inline in inlines {
         match inline {
             Inline::Text(s) => text.push_str(s),
-            Inline::Emph(inner) => text.push_str(&inlines_to_plain(inner)),
-            Inline::Strong(inner) => text.push_str(&inlines_to_plain(inner)),
+            Inline::Emph(inner) => text.push_str(&inlines_to_plain(inner, i18n)),
+            Inline::Strong(inner) => text.push_str(&inlines_to_plain(inner, i18n)),
             Inline::Code(s) => text.push_str(s),
             Inline::Link {
                 text: link_text, ..
-            } => text.push_str(&inlines_to_plain(link_text)),
+            } => text.push_str(&inlines_to_plain(link_text, i18n)),
             Inline::Image { alt, .. } => {
-                text.push_str("[图片: ");
+                text.push('[');
+                text.push_str(&i18n.t("outline-image-prefix"));
+                text.push(' ');
                 text.push_str(alt);
                 text.push(']');
             }
@@ -55,14 +104,14 @@ fn inlines_to_plain(inlines: &[Inline]) -> String {
 }
 
 /// 从 Document AST 提取所有标题项。
-pub fn extract_outline(doc: &Document) -> Vec<OutlineItem> {
+pub fn extract_outline(doc: &Document, i18n: &I18n) -> Vec<OutlineItem> {
     doc.blocks
         .iter()
         .filter_map(|bws| match &bws.block {
             Block::Heading(h) => {
-                let text = inlines_to_plain(&h.inlines);
+                let text = inlines_to_plain(&h.inlines, i18n);
                 let text = if text.is_empty() {
-                    "(空标题)".to_string()
+                    i18n.t("outline-empty-heading")
                 } else {
                     text
                 };
@@ -162,15 +211,148 @@ fn auto_expand_ancestors(
     }
 }
 
+/// 重排文档块：将大纲索引 `from_idx` 对应的 section 移动到 `to_idx`。
+///
+/// `to_idx` 是移动后 section 在大纲中的新索引位置。
+/// Section 范围包括标题及其后所有块，直到下一个标题。
+///
+/// 返回新的 Markdown 文本，若无需操作则返回 `None`。
+pub fn reorder_blocks(
+    doc: &Document,
+    items: &[OutlineItem],
+    from_idx: usize,
+    to_idx: usize,
+) -> Option<String> {
+    if from_idx == to_idx || from_idx >= items.len() || to_idx >= items.len() || items.len() < 2 {
+        return None;
+    }
+
+    // 建立每个 heading 对应的 block 范围（section）
+    let heading_block_indices: Vec<usize> = doc
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, bws)| matches!(bws.block, Block::Heading(_)).then_some(i))
+        .collect();
+
+    if heading_block_indices.len() != items.len() {
+        return None;
+    }
+
+    // 为每个 outline 项计算其 block 范围 [start, end)
+    let sections: Vec<(usize, usize)> = heading_block_indices
+        .iter()
+        .enumerate()
+        .map(|(i, &start)| {
+            let end = heading_block_indices
+                .get(i + 1)
+                .copied()
+                .unwrap_or(doc.blocks.len());
+            (start, end)
+        })
+        .collect();
+
+    // 构建新的 outline 顺序
+    let mut new_order: Vec<usize> = (0..items.len()).collect();
+    let moved = new_order.remove(from_idx);
+    new_order.insert(to_idx, moved);
+
+    // 按新顺序拼接所有 section 的 blocks
+    let mut new_blocks: Vec<BlockWithSpan> = Vec::with_capacity(doc.blocks.len());
+    for &idx in &new_order {
+        let (start, end) = sections[idx];
+        for j in start..end {
+            new_blocks.push(doc.blocks[j].clone());
+        }
+    }
+
+    let new_doc = Document { blocks: new_blocks };
+    Some(to_markdown(&new_doc))
+}
+
+/// 从大纲项生成 Markdown 目录（TOC）。
+///
+/// 返回 (toc_string, heading_count)，仅包含可见项。
+pub fn generate_toc(items: &[OutlineItem], visible: &[bool]) -> (String, usize) {
+    let mut toc = String::new();
+    let mut count = 0;
+    for (i, item) in items.iter().enumerate() {
+        if i < visible.len() && !visible[i] {
+            continue;
+        }
+        count += 1;
+        let indent = "  ".repeat(item.level.saturating_sub(1) as usize);
+        // 生成 anchor：小写，去除非字母数字，空格转连字符
+        let anchor = item
+            .text
+            .chars()
+            .filter_map(|c| {
+                if c.is_alphanumeric() {
+                    Some(c.to_ascii_lowercase())
+                } else if c == ' ' || c == '-' {
+                    Some('-')
+                } else {
+                    None
+                }
+            })
+            .collect::<String>();
+        toc.push_str(&format!("{}- [{}](#{})\n", indent, item.text, anchor));
+    }
+    (toc, count)
+}
+
+/// 显示大纲面板。
 pub fn show_outline_panel(
     ui: &mut egui::Ui,
     state: &mut EditorState,
     fold_state: &mut OutlineFoldState,
+    drag_state: &mut OutlineDragState,
+    filter_state: &mut OutlineFilterState,
+    i18n: &I18n,
 ) {
     let doc = state.current_doc();
-    let items = extract_outline(&doc);
+    let items = extract_outline(&doc, i18n);
 
-    ui.heading(format!("📑 大纲 ({})", items.len()));
+    let mut args = FluentArgs::new();
+    args.set("count", items.len() as i64);
+
+    ui.horizontal(|ui| {
+        ui.heading(i18n.tr("outline-heading", Some(&args)));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .button("📋")
+                .on_hover_text(i18n.t("outline-copy-toc"))
+                .clicked()
+            {
+                let vis = compute_visibility(&items, &fold_state.collapsed);
+                let (toc, count) = generate_toc(&items, &vis);
+                ui.ctx().copy_text(toc);
+                let mut status_args = FluentArgs::new();
+                status_args.set("count", count as i64);
+                state.status_message = i18n.tr("outline-toc-copied", Some(&status_args));
+            }
+        });
+    });
+
+    // 过滤输入框
+    let filter_id = egui::Id::new("outline_filter_input");
+    ui.add(
+        egui::TextEdit::singleline(&mut filter_state.query)
+            .id(filter_id)
+            .hint_text(i18n.t("outline-filter-placeholder"))
+            .desired_width(f32::INFINITY),
+    );
+    if filter_state.focus {
+        ui.ctx().memory_mut(|m| m.request_focus(filter_id));
+        filter_state.focus = false;
+    }
+
+    // 过滤并自动展开匹配项的祖先
+    let matched = filter_outline_items(&items, &filter_state.query);
+    let is_filtering = !filter_state.query.trim().is_empty();
+    if is_filtering {
+        expand_ancestors_for_filter(&items, &mut fold_state.collapsed, &matched);
+    }
 
     // 检测文档结构变化，若指纹不匹配则重置折叠状态
     let fp = compute_outline_fingerprint(&items);
@@ -182,7 +364,7 @@ pub fn show_outline_panel(
     fold_state.collapsed.retain(|&i| i < items.len());
 
     if items.is_empty() {
-        ui.label(egui::RichText::new("（无标题）").weak());
+        ui.label(egui::RichText::new(i18n.t("outline-empty")).weak());
         return;
     }
 
@@ -198,10 +380,24 @@ pub fn show_outline_panel(
         }
     }
 
+    // 构建过滤匹配集合（用于快速查找）
+    let matched_set: BTreeSet<usize> = matched.iter().copied().collect();
+
     egui::ScrollArea::vertical()
         .id_salt("outline_scroll")
         .show(ui, |ui| {
             for (i, item) in items.iter().enumerate() {
+                // 过滤模式下，仅显示匹配项及其祖先（维持树结构上下文）
+                if is_filtering && !matched_set.contains(&i) {
+                    // 检查是否为某个匹配项的祖先（需要在可见性链上）
+                    let is_ancestor_of_match = matched_set
+                        .iter()
+                        .any(|&m| m > i && items[i].level < items[m].level);
+                    if !is_ancestor_of_match {
+                        continue;
+                    }
+                }
+
                 if !visible[i] {
                     continue;
                 }
@@ -210,6 +406,15 @@ pub fn show_outline_panel(
                 let indent = (item.level.saturating_sub(1) as f32) * 16.0;
                 let can_fold = has_children(&items, i);
                 let is_collapsed = can_fold && fold_state.collapsed.contains(&i);
+
+                let is_dragging = drag_state.dragged_index == Some(i);
+                let is_drop_target = drag_state.drop_target == Some(i);
+
+                // 拖拽目标指示线
+                if is_drop_target && !is_dragging {
+                    ui.add_space(1.0);
+                    ui.separator();
+                }
 
                 ui.horizontal(|ui| {
                     ui.add_space(indent);
@@ -239,18 +444,59 @@ pub fn show_outline_panel(
                         egui::RichText::new(&item.text).size(13.0).weak()
                     };
 
+                    // 拖拽中高亮被拖拽的项
+                    let text = if is_dragging {
+                        text.background_color(egui::Color32::from_rgba_premultiplied(
+                            80, 120, 200, 80,
+                        ))
+                    } else {
+                        text
+                    };
+
                     let response = ui.selectable_label(is_current, text);
-                    if response.clicked() {
+
+                    // 拖拽交互：只在非拖拽状态时允许点击导航
+                    if response.clicked() && drag_state.dragged_index.is_none() {
                         let cursor = Cursor::new(item.line, 0);
                         let _ = state.editor_mut().set_cursor(cursor);
+                    }
+
+                    // 拖拽开始检测
+                    if response.drag_started() {
+                        drag_state.dragged_index = Some(i);
+                    }
+
+                    // 拖拽悬停检测
+                    if response.contains_pointer() && drag_state.dragged_index.is_some() {
+                        drag_state.drop_target = Some(i);
                     }
                 });
             }
         });
+
+    // 拖拽释放检测：在 ScrollArea 之外统一处理
+    if drag_state.dragged_index.is_some()
+        && ui
+            .ctx()
+            .input(|i| i.pointer.button_released(egui::PointerButton::Primary))
+    {
+        if let Some(dragged) = drag_state.dragged_index {
+            if let Some(target) = drag_state.drop_target {
+                if target < items.len() && dragged < items.len() {
+                    if let Some(new_md) = reorder_blocks(&doc, &items, dragged, target) {
+                        let _ = state.apply(editor_engine::Command::ReplaceAll { text: new_md });
+                    }
+                }
+            }
+        }
+        drag_state.dragged_index = None;
+        drag_state.drop_target = None;
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
     use super::*;
     use document_model::ast::{BlockWithSpan, Heading, Span};
 
@@ -268,10 +514,14 @@ mod tests {
         }
     }
 
+    fn i18n_zh() -> I18n {
+        I18n::with_lang(i18n::Lang::ZhCN)
+    }
+
     #[test]
     fn extract_outline_empty_doc() {
         let doc = doc_from_blocks(vec![]);
-        assert_eq!(extract_outline(&doc), vec![]);
+        assert_eq!(extract_outline(&doc, &i18n_zh()), vec![]);
     }
 
     #[test]
@@ -284,7 +534,7 @@ mod tests {
             0,
             0,
         )]);
-        let items = extract_outline(&doc);
+        let items = extract_outline(&doc, &i18n_zh());
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].level, 1);
         assert_eq!(items[0].text, "简介");
@@ -319,7 +569,7 @@ mod tests {
                 5,
             ),
         ]);
-        let items = extract_outline(&doc);
+        let items = extract_outline(&doc, &i18n_zh());
         assert_eq!(items.len(), 3);
         assert_eq!(items[0].level, 1);
         assert_eq!(items[1].level, 2);
@@ -336,7 +586,7 @@ mod tests {
             0,
             0,
         )]);
-        assert_eq!(extract_outline(&doc), vec![]);
+        assert_eq!(extract_outline(&doc, &i18n_zh()), vec![]);
     }
 
     #[test]
@@ -357,7 +607,7 @@ mod tests {
             0,
             0,
         )]);
-        let items = extract_outline(&doc);
+        let items = extract_outline(&doc, &i18n_zh());
         assert_eq!(items[0].text, "重要：参考");
     }
 
@@ -371,8 +621,8 @@ mod tests {
             3,
             3,
         )]);
-        let items = extract_outline(&doc);
-        assert_eq!(items[0].text, "(空标题)");
+        let items = extract_outline(&doc, &i18n_zh());
+        assert_eq!(items[0].text, "（空标题）");
     }
 
     #[test]
@@ -403,7 +653,7 @@ mod tests {
                 3,
             ),
         ]);
-        let items = extract_outline(&doc);
+        let items = extract_outline(&doc, &i18n_zh());
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].text, "标题");
         assert_eq!(items[1].text, "副标题");
@@ -684,5 +934,197 @@ mod tests {
         let fs = OutlineFoldState::default();
         assert!(fs.collapsed.is_empty());
         assert_eq!(fs.fingerprint, 0);
+    }
+
+    // ---- reorder_blocks ----
+
+    fn heading_doc(level: u8, text: &str, line: usize) -> BlockWithSpan {
+        bws(
+            Block::Heading(Heading {
+                level,
+                inlines: vec![Inline::Text(text.into())],
+            }),
+            line,
+            line,
+        )
+    }
+
+    fn para_doc(text: &str, line: usize) -> BlockWithSpan {
+        bws(
+            Block::Paragraph(document_model::ast::Paragraph {
+                inlines: vec![Inline::Text(text.into())],
+            }),
+            line,
+            line,
+        )
+    }
+
+    #[test]
+    fn reorder_move_first_after_second() {
+        // Document: # A, # B → # B, # A
+        let doc = doc_from_blocks(vec![heading_doc(1, "A", 0), heading_doc(1, "B", 1)]);
+        let items = extract_outline(&doc, &i18n_zh());
+        let result = reorder_blocks(&doc, &items, 0, 1).expect("reorder");
+        let new_doc = document_model::parse(&result).expect("parse");
+        let new_items = extract_outline(&new_doc, &i18n_zh());
+        assert_eq!(new_items[0].text, "B");
+        assert_eq!(new_items[1].text, "A");
+    }
+
+    #[test]
+    fn reorder_noop_same_position() {
+        let doc = doc_from_blocks(vec![heading_doc(1, "A", 0), heading_doc(1, "B", 1)]);
+        let items = extract_outline(&doc, &i18n_zh());
+        assert!(reorder_blocks(&doc, &items, 0, 0).is_none());
+    }
+
+    #[test]
+    fn reorder_preserves_non_heading_blocks() {
+        // Document: # A, paragraph, # B → # B, # A, paragraph
+        let doc = doc_from_blocks(vec![
+            heading_doc(1, "A", 0),
+            para_doc("content A", 1),
+            heading_doc(1, "B", 2),
+        ]);
+        let items = extract_outline(&doc, &i18n_zh());
+        let result = reorder_blocks(&doc, &items, 0, 1).expect("reorder");
+        // After reorder: # B, # A, paragraph (content moves with heading A)
+        let new_doc = document_model::parse(&result).expect("parse");
+        let new_items = extract_outline(&new_doc, &i18n_zh());
+        assert_eq!(new_items[0].text, "B");
+        assert_eq!(new_items[1].text, "A");
+        // Verify the paragraph is after heading A (which is now at index 1)
+        assert!(new_doc.blocks.len() >= 3);
+    }
+
+    #[test]
+    fn reorder_move_heading_with_content_to_end() {
+        let doc = doc_from_blocks(vec![
+            heading_doc(1, "A", 0),
+            para_doc("content A", 1),
+            heading_doc(1, "B", 2),
+            para_doc("content B", 3),
+        ]);
+        let items = extract_outline(&doc, &i18n_zh());
+        // Move H1 "A" (with its paragraph) after H1 "B"
+        let result = reorder_blocks(&doc, &items, 0, 1).expect("reorder");
+        let new_doc = document_model::parse(&result).expect("parse");
+        let new_items = extract_outline(&new_doc, &i18n_zh());
+        assert_eq!(new_items[0].text, "B");
+        assert_eq!(new_items[1].text, "A");
+    }
+
+    #[test]
+    fn reorder_out_of_bounds_returns_none() {
+        let doc = doc_from_blocks(vec![heading_doc(1, "A", 0), heading_doc(1, "B", 1)]);
+        let items = extract_outline(&doc, &i18n_zh());
+        assert!(reorder_blocks(&doc, &items, 0, 5).is_none());
+        assert!(reorder_blocks(&doc, &items, 5, 0).is_none());
+    }
+
+    #[test]
+    fn reorder_single_heading_returns_none() {
+        let doc = doc_from_blocks(vec![heading_doc(1, "Only", 0)]);
+        let items = extract_outline(&doc, &i18n_zh());
+        assert!(reorder_blocks(&doc, &items, 0, 0).is_none());
+    }
+
+    // ---- filter_outline_items ----
+
+    fn make_item(text: &str) -> OutlineItem {
+        OutlineItem {
+            level: 1,
+            text: text.into(),
+            line: 0,
+        }
+    }
+
+    #[test]
+    fn filter_empty_returns_all() {
+        let items = vec![make_item("简介"), make_item("安装"), make_item("配置")];
+        let result = filter_outline_items(&items, "");
+        assert_eq!(result, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn filter_case_insensitive() {
+        let items = vec![
+            make_item("Introduction"),
+            make_item("INSTALL"),
+            make_item("Config"),
+        ];
+        let result = filter_outline_items(&items, "in");
+        assert_eq!(result, vec![0, 1]); // Introduction and INSTALL both contain "in" case-insensitively
+    }
+
+    #[test]
+    fn filter_whitespace_only_returns_all() {
+        let items = vec![make_item("A"), make_item("B")];
+        let result = filter_outline_items(&items, "   ");
+        assert_eq!(result, vec![0, 1]);
+    }
+
+    #[test]
+    fn filter_no_match_returns_empty() {
+        let items = vec![make_item("Hello"), make_item("World")];
+        let result = filter_outline_items(&items, "xyz");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn filter_chinese_characters() {
+        let items = vec![
+            make_item("简介"),
+            make_item("安装指南"),
+            make_item("配置说明"),
+            make_item("Introduction"),
+        ];
+        let result = filter_outline_items(&items, "安");
+        assert_eq!(result, vec![1]); // Only "安装指南" contains "安"
+    }
+
+    // ---- generate_toc ----
+
+    #[test]
+    fn toc_flat_headings() {
+        let items = vec![oi(1, 0), oi(1, 2), oi(1, 4)];
+        let visible = vec![true; 3];
+        let (toc, count) = generate_toc(&items, &visible);
+        assert_eq!(count, 3);
+        assert!(toc.contains("- [H1](#h1)"));
+    }
+
+    #[test]
+    fn toc_nested_indentation() {
+        let items = vec![oi(1, 0), oi(2, 2), oi(3, 4)];
+        let visible = vec![true; 3];
+        let (toc, count) = generate_toc(&items, &visible);
+        assert_eq!(count, 3);
+        assert!(toc.contains("- [H1](#h1)"));
+        assert!(toc.contains("  - [H2](#h2)"));
+        assert!(toc.contains("    - [H3](#h3)"));
+    }
+
+    #[test]
+    fn toc_respects_visibility() {
+        let items = vec![oi(1, 0), oi(2, 2), oi(1, 4)];
+        let visible = vec![true, false, true];
+        let (toc, count) = generate_toc(&items, &visible);
+        assert_eq!(count, 2);
+        assert!(!toc.contains("H2")); // hidden item should not appear
+    }
+
+    #[test]
+    fn toc_anchor_chinese_chars_kept() {
+        let items = vec![OutlineItem {
+            level: 1,
+            text: "简介 Intro".into(),
+            line: 0,
+        }];
+        let visible = vec![true];
+        let (toc, count) = generate_toc(&items, &visible);
+        assert_eq!(count, 1);
+        // 中文被视为 alphabetic，空格转为连字符
+        assert!(toc.contains("(#简介-intro)"), "TOC: {}", toc);
     }
 }

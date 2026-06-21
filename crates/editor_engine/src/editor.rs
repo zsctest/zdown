@@ -105,6 +105,7 @@ impl Editor {
             }
             Command::Delete { range } => Ok(range.normalized().0),
             Command::Replace { range, .. } => Ok(range.normalized().0),
+            Command::ReplaceAll { .. } => Ok(Cursor::zero()),
         }
     }
 
@@ -282,6 +283,33 @@ mod tests {
         assert_eq!(e.to_string(), "hello");
         // cursor 应在 (0,5)（normalized lo），不是 (0,11)
         assert_eq!(e.cursor, Cursor::new(0, 5));
+    }
+
+    #[test]
+    fn replace_all_via_editor() {
+        let mut e = Editor::new("original\ncontent");
+        e.apply(Command::ReplaceAll {
+            text: "new\ncontent".into(),
+        })
+        .expect("apply");
+        assert_eq!(e.to_string(), "new\ncontent");
+        assert!(e.is_dirty());
+        // cursor should be at start after ReplaceAll
+        assert_eq!(e.cursor, Cursor::zero());
+    }
+
+    #[test]
+    fn replace_all_undo_via_editor() {
+        let mut e = Editor::new("original");
+        e.apply(Command::ReplaceAll {
+            text: "changed".into(),
+        })
+        .expect("apply");
+        assert_eq!(e.to_string(), "changed");
+        let did = e.undo().expect("undo");
+        assert!(did);
+        assert_eq!(e.to_string(), "original");
+        assert!(!e.is_dirty());
     }
 
     #[test]

@@ -18,8 +18,11 @@ use config::ThemeMode;
 use editor_engine::Cursor;
 use editor_state::EditorState;
 use eframe::egui;
+use fluent_bundle::FluentArgs;
+use i18n::I18n;
 use menu::ConfirmDialog;
 use search_state::SearchState;
+use terminal_panel::TerminalPanel;
 use view_mode::ViewMode;
 
 fn main() -> eframe::Result {
@@ -61,6 +64,10 @@ struct ZdownApp {
     render_cache: markdown_renderer::RenderCache,
     /// 大纲面板折叠状态。
     fold_state: outline_view::OutlineFoldState,
+    /// 大纲面板拖拽排序状态。
+    outline_drag: outline_view::OutlineDragState,
+    /// 大纲面板搜索过滤状态。
+    outline_filter: outline_view::OutlineFilterState,
     /// 应用配置（持久化用户设置）。
     app_config: config::AppConfig,
     /// 设置对话框状态。
@@ -69,12 +76,20 @@ struct ZdownApp {
     search: SearchState,
     /// 当前主题模式。
     theme: ThemeMode,
+    /// 国际化管理器。
+    i18n: I18n,
+    /// 终端面板。
+    terminal: TerminalPanel,
 }
 
 impl Default for ZdownApp {
     fn default() -> Self {
         let app_config = config::AppConfig::load().unwrap_or_default();
         let theme = app_config.theme.clone();
+        let lang = app_config
+            .lang
+            .parse::<i18n::Lang>()
+            .unwrap_or(i18n::Lang::ZhCN);
         Self {
             state: EditorState::default(),
             confirm: ConfirmDialog::default(),
@@ -94,10 +109,14 @@ impl Default for ZdownApp {
             },
             render_cache: markdown_renderer::RenderCache::new(),
             fold_state: outline_view::OutlineFoldState::default(),
+            outline_drag: outline_view::OutlineDragState::default(),
+            outline_filter: outline_view::OutlineFilterState::default(),
             app_config,
             settings_dialog: settings_dialog::SettingsDialog::default(),
             search: SearchState::default(),
             theme,
+            i18n: I18n::with_lang(lang),
+            terminal: TerminalPanel::default(),
         }
     }
 }
@@ -123,6 +142,8 @@ impl eframe::App for ZdownApp {
             &self.app_config,
             &mut self.theme,
             &self.app_config.image_hosting,
+            &self.i18n,
+            &mut self.terminal,
         );
 
         // 主题切换时重建 highlighter + 保存配置
@@ -181,23 +202,33 @@ impl eframe::App for ZdownApp {
             }
         }
 
-        // Ctrl+I 浏览插入图片
-        if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::I)) {
-            menu::trigger_browse_image(&mut self.state, &self.app_config.image_hosting);
+        // Ctrl+` 切换终端
+        if mods.ctrl
+            && !mods.shift
+            && !mods.alt
+            && ctx.input(|i| i.key_pressed(egui::Key::Backtick))
+        {
+            self.terminal.toggle(&ctx);
         }
 
-        menu::show_confirm_dialog(&ctx, &mut self.state, &mut self.confirm);
+        // Ctrl+I 浏览插入图片
+        if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::I)) {
+            menu::trigger_browse_image(&mut self.state, &self.app_config.image_hosting, &self.i18n);
+        }
+
+        menu::show_confirm_dialog(&ctx, &mut self.state, &mut self.confirm, &self.i18n);
 
         settings_dialog::show_settings_dialog(
             &ctx,
             &mut self.app_config,
             &mut self.settings_dialog,
+            &mut self.i18n,
         );
 
         // 标签栏（多标签页时显示）
         if self.state.tab_count() > 1 {
             let active_before = self.state.active_tab_index();
-            tab_bar::show_tab_bar(ui, &mut self.state, &mut self.confirm);
+            tab_bar::show_tab_bar(ui, &mut self.state, &mut self.confirm, &self.i18n);
             // 标签页切换时关闭搜索
             if self.state.active_tab_index() != active_before {
                 self.search.close();
@@ -224,7 +255,14 @@ impl eframe::App for ZdownApp {
             .default_width(200.0)
             .min_width(60.0)
             .show_inside(ui, |ui| {
-                outline_view::show_outline_panel(ui, &mut self.state, &mut self.fold_state);
+                outline_view::show_outline_panel(
+                    ui,
+                    &mut self.state,
+                    &mut self.fold_state,
+                    &mut self.outline_drag,
+                    &mut self.outline_filter,
+                    &self.i18n,
+                );
             });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -235,7 +273,7 @@ impl eframe::App for ZdownApp {
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             // 查找标签
-                            ui.label(egui::RichText::new("查找:").size(13.0));
+                            ui.label(egui::RichText::new(self.i18n.t("search-find")).size(13.0));
 
                             // 查找输入框
                             let search_id = egui::Id::new("search_query_input");
@@ -347,7 +385,7 @@ impl eframe::App for ZdownApp {
 
                         // 替换行
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("替换:").size(13.0));
+                            ui.label(egui::RichText::new(self.i18n.t("search-replace")).size(13.0));
                             ui.add(
                                 egui::TextEdit::singleline(&mut self.search.replace)
                                     .desired_width(200.0)
@@ -355,7 +393,10 @@ impl eframe::App for ZdownApp {
                             );
 
                             if ui
-                                .add(egui::Button::new("替换").min_size(egui::vec2(48.0, 16.0)))
+                                .add(
+                                    egui::Button::new(self.i18n.t("search-replace-btn"))
+                                        .min_size(egui::vec2(48.0, 16.0)),
+                                )
                                 .clicked()
                             {
                                 if let Some(m) = self.search.current_match_pos().cloned() {
@@ -382,7 +423,10 @@ impl eframe::App for ZdownApp {
                             }
 
                             if ui
-                                .add(egui::Button::new("全部").min_size(egui::vec2(48.0, 16.0)))
+                                .add(
+                                    egui::Button::new(self.i18n.t("search-replace-all"))
+                                        .min_size(egui::vec2(48.0, 16.0)),
+                                )
                                 .clicked()
                             {
                                 let count = self.search.matches.len();
@@ -404,7 +448,10 @@ impl eframe::App for ZdownApp {
                                     );
                                 }
                                 self.search.close();
-                                self.state.status_message = format!("已替换 {count} 处");
+                                let mut args = FluentArgs::new();
+                                args.set("count", count as i64);
+                                self.state.status_message =
+                                    self.i18n.tr("status-replaced-count", Some(&args));
                             }
                         });
                     });
@@ -442,12 +489,27 @@ impl eframe::App for ZdownApp {
             }
         });
 
+        // ===== 终端面板 (Ctrl+`) =====
+        if self.terminal.visible {
+            egui::TopBottomPanel::bottom("terminal_panel")
+                .resizable(true)
+                .default_height(self.terminal.height)
+                .min_height(60.0)
+                .show_inside(ui, |ui| {
+                    self.terminal.show(ui);
+                });
+        }
+
         if self.state.should_exit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
 
         // 更新窗口标题（只在变化时发送，避免每帧触发窗口管理器）
-        let title = format!("{} [{}]", self.state.title(), self.view_mode.label());
+        let title = format!(
+            "{} [{}]",
+            self.state.title(),
+            self.i18n.t(self.view_mode.label())
+        );
         if title != self.last_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;

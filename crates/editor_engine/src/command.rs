@@ -13,6 +13,8 @@ pub enum Command {
     Delete { range: Selection },
     /// 将 range 范围替换为 text。
     Replace { range: Selection, text: String },
+    /// 替换整个 buffer 内容为 text。撤销时恢复原全部内容。
+    ReplaceAll { text: String },
 }
 
 /// 命令执行后的撤销信息。与 Command 配对存入 History。
@@ -48,6 +50,20 @@ impl Command {
                     deleted_text: Some(deleted),
                 })
             }
+            Command::ReplaceAll { text } => {
+                let deleted = buf.to_string();
+                if buf.len_chars() > 0 {
+                    let end = buf.char_to_cursor(buf.len_chars())?;
+                    buf.delete(Cursor::zero(), end)?;
+                }
+                if !text.is_empty() {
+                    buf.insert(Cursor::zero(), &text)?;
+                }
+                Ok(AppliedCommand {
+                    command: Command::ReplaceAll { text },
+                    deleted_text: Some(deleted),
+                })
+            }
         }
     }
 
@@ -70,6 +86,15 @@ impl Command {
                 buf.delete(lo, end)?;
                 if let Some(deleted) = &applied.deleted_text {
                     buf.insert(lo, deleted)?;
+                }
+            }
+            Command::ReplaceAll { .. } => {
+                if buf.len_chars() > 0 {
+                    let end = buf.char_to_cursor(buf.len_chars())?;
+                    buf.delete(Cursor::zero(), end)?;
+                }
+                if let Some(deleted) = &applied.deleted_text {
+                    buf.insert(Cursor::zero(), deleted)?;
                 }
             }
         }
@@ -183,5 +208,70 @@ mod tests {
         assert_eq!(b.to_string(), "abXf");
         Command::undo(&applied, &mut b).expect("undo");
         assert_eq!(b.to_string(), "abcdef");
+    }
+
+    #[test]
+    fn replace_all_apply_replaces_content() {
+        let mut b = buf("hello\nworld\n");
+        let cmd = Command::ReplaceAll {
+            text: "new\ncontent".into(),
+        };
+        let applied = cmd.apply(&mut b).expect("apply");
+        assert_eq!(b.to_string(), "new\ncontent");
+        assert_eq!(applied.deleted_text.as_deref(), Some("hello\nworld\n"));
+    }
+
+    #[test]
+    fn replace_all_undo_restores_content() {
+        let mut b = buf("original text");
+        let cmd = Command::ReplaceAll {
+            text: "replaced".into(),
+        };
+        let applied = cmd.apply(&mut b).expect("apply");
+        assert_eq!(b.to_string(), "replaced");
+        Command::undo(&applied, &mut b).expect("undo");
+        assert_eq!(b.to_string(), "original text");
+    }
+
+    #[test]
+    fn replace_all_on_empty_buffer() {
+        let mut b = buf("");
+        let cmd = Command::ReplaceAll {
+            text: "hello".into(),
+        };
+        let applied = cmd.apply(&mut b).expect("apply");
+        assert_eq!(b.to_string(), "hello");
+        assert_eq!(applied.deleted_text.as_deref(), Some(""));
+        Command::undo(&applied, &mut b).expect("undo");
+        assert_eq!(b.to_string(), "");
+    }
+
+    #[test]
+    fn replace_all_to_empty() {
+        let mut b = buf("some content");
+        let cmd = Command::ReplaceAll {
+            text: String::new(),
+        };
+        let applied = cmd.apply(&mut b).expect("apply");
+        assert_eq!(b.to_string(), "");
+        Command::undo(&applied, &mut b).expect("undo");
+        assert_eq!(b.to_string(), "some content");
+    }
+
+    #[test]
+    fn replace_all_redo_after_undo() {
+        let mut b = buf("version 1");
+        let cmd = Command::ReplaceAll {
+            text: "version 2".into(),
+        };
+        let applied = cmd.clone().apply(&mut b).expect("apply");
+        assert_eq!(b.to_string(), "version 2");
+        Command::undo(&applied, &mut b).expect("undo");
+        assert_eq!(b.to_string(), "version 1");
+        // Re-apply (redo)
+        let re_applied = cmd.apply(&mut b).expect("re-apply");
+        assert_eq!(b.to_string(), "version 2");
+        Command::undo(&re_applied, &mut b).expect("undo redo");
+        assert_eq!(b.to_string(), "version 1");
     }
 }
