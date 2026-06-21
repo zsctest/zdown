@@ -372,6 +372,7 @@ pub fn generate_html(doc: &Document, config: &HtmlConfig) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
     use document_model::ast::{BlockWithSpan, List, Span, TableCell};
 

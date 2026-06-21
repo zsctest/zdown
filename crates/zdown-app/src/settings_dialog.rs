@@ -290,10 +290,6 @@ fn handle_keybinding_capture(ctx: &egui::Context, dialog: &mut SettingsDialog) {
                     key_name,
                 };
 
-                let conflict = dialog
-                    .keymap_buffer
-                    .detect_conflict(&capture_action, &new_binding);
-
                 dialog
                     .keymap_buffer
                     .set_override(capture_action, new_binding);

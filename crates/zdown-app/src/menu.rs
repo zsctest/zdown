@@ -31,7 +31,7 @@ impl ConfirmDialog {
 }
 
 /// 渲染菜单栏。
-#[allow(deprecated)]
+#[allow(deprecated, clippy::too_many_arguments)]
 pub fn show_menu(
     ui: &mut egui::Ui,
     state: &mut EditorState,
