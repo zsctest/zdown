@@ -3,6 +3,7 @@
 //! 存储用户偏好设置（自定义 CSS 等）到 TOML 文件。
 
 pub mod keybinding;
+pub use keybinding::{Action, KeyBinding, Keymap, Modifiers};
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -86,6 +87,10 @@ pub struct AppConfig {
     /// 拼写检查开关。默认启用。
     #[serde(default = "default_spell_check")]
     pub spell_check_enabled: bool,
+
+    /// 快捷键映射（delta 模式：仅存储用户覆盖）。
+    #[serde(default)]
+    pub keymap: Keymap,
 }
 
 impl Default for AppConfig {
@@ -95,6 +100,7 @@ impl Default for AppConfig {
             theme: ThemeMode::Dark,
             image_hosting: ImageHostingConfig::default(),
             spell_check_enabled: true,
+            keymap: Keymap::default(),
         }
     }
 }
@@ -369,5 +375,71 @@ theme = "Dark"
         let toml_str = toml::to_string_pretty(&config).expect("serialize");
         let restored: AppConfig = toml::from_str(&toml_str).expect("deserialize");
         assert!(!restored.spell_check_enabled);
+    }
+
+    // ── Keymap 集成测试 ──
+
+    #[test]
+    fn keymap_default_is_empty() {
+        let config = AppConfig::default();
+        assert!(config.keymap.overrides.is_empty());
+    }
+
+    #[test]
+    fn keymap_roundtrip_with_override() {
+        let path = temp_path("keymap");
+        cleanup(&path);
+
+        let mut config = AppConfig::default();
+        config.keymap.set_override(
+            Action::Save,
+            KeyBinding {
+                modifiers: Modifiers {
+                    ctrl: false,
+                    shift: false,
+                    alt: true,
+                },
+                key_name: "X".into(),
+            },
+        );
+        config.save_to(&path).expect("save");
+        let loaded = AppConfig::load_from(&path).expect("load");
+        assert_eq!(
+            loaded.keymap.resolve(&Action::Save),
+            config.keymap.resolve(&Action::Save)
+        );
+        cleanup(&path);
+    }
+
+    #[test]
+    fn keymap_old_config_without_keymap_defaults_empty() {
+        let path = temp_path("old_keymap_config");
+        cleanup(&path);
+        // 模拟旧版本 TOML（无 keymap 字段）
+        std::fs::write(&path, "custom_css = \"h1 { color: red; }\"\n").expect("write");
+        let loaded = AppConfig::load_from(&path).expect("load");
+        assert!(loaded.keymap.overrides.is_empty());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn keymap_serialize_produces_toml_with_overrides() {
+        let mut config = AppConfig::default();
+        config.keymap.set_override(
+            Action::Save,
+            KeyBinding {
+                modifiers: Modifiers {
+                    ctrl: false,
+                    shift: false,
+                    alt: true,
+                },
+                key_name: "X".into(),
+            },
+        );
+        let toml_str = toml::to_string_pretty(&config).expect("serialize");
+        // 应包含 keymap 段
+        assert!(toml_str.contains("[keymap]") || toml_str.contains("keymap"));
+        // 应有 Save 的 override
+        assert!(toml_str.contains("Save"));
     }
 }

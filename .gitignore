@@ -31,6 +31,8 @@ Thumbs.db
 # Claude / CodeBuddy 会话本地缓存（如未来生成）
 .claude/cache/
 .claude/logs/
+.claude/worktrees/
+.superpowers/
 .codebuddy/cache/
 .codebuddy/logs/
 # CodeBuddy 本地 MCP 启用配置（.local. 后缀约定不入库）
