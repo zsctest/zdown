@@ -14,6 +14,17 @@ enum SettingsTab {
     Css,
     Image,
     Spell,
+    Keybind,
+}
+
+/// 按键捕获状态。
+#[derive(Debug, Clone)]
+struct KeybindingCapture {
+    /// 正在重新绑定的 action。
+    action: config::Action,
+    /// 冲突的 action（若有）。
+    #[allow(dead_code)]
+    conflict_with: Option<config::Action>,
 }
 
 /// 设置对话框状态。
@@ -30,6 +41,10 @@ pub struct SettingsDialog {
     strategy_buffer: usize, // 0=Local, 1=Base64, 2=SmMs
     /// 拼写检查开关缓冲区。
     spell_check_buffer: bool,
+    /// 快捷键映射的可变副本（编辑缓冲）。
+    keymap_buffer: config::Keymap,
+    /// 当前按键捕获状态。
+    key_capture: Option<KeybindingCapture>,
 }
 
 impl Default for SettingsDialog {
@@ -42,6 +57,8 @@ impl Default for SettingsDialog {
             smms_token_buffer: String::new(),
             strategy_buffer: 0,
             spell_check_buffer: true,
+            keymap_buffer: config::Keymap::default(),
+            key_capture: None,
         }
     }
 }
@@ -53,6 +70,7 @@ impl SettingsDialog {
         current_css: Option<&str>,
         image_config: &ImageHostingConfig,
         spell_check_enabled: bool,
+        keymap: &config::Keymap,
     ) {
         self.open = true;
         self.active_tab = SettingsTab::Css;
@@ -65,6 +83,122 @@ impl SettingsDialog {
             ImageStrategy::SmMs => 2,
         };
         self.spell_check_buffer = spell_check_enabled;
+        self.keymap_buffer = keymap.clone();
+        self.key_capture = None;
+    }
+}
+
+/// 将 egui::Key 转为 key_name 字符串。
+fn key_name_from_egui(key: egui::Key) -> Option<String> {
+    use egui::Key;
+    let name = match key {
+        Key::A => "A", Key::B => "B", Key::C => "C", Key::D => "D",
+        Key::E => "E", Key::F => "F", Key::G => "G", Key::H => "H",
+        Key::I => "I", Key::J => "J", Key::K => "K", Key::L => "L",
+        Key::M => "M", Key::N => "N", Key::O => "O", Key::P => "P",
+        Key::Q => "Q", Key::R => "R", Key::S => "S", Key::T => "T",
+        Key::U => "U", Key::V => "V", Key::W => "W", Key::X => "X",
+        Key::Y => "Y", Key::Z => "Z",
+        Key::Num0 => "Num0", Key::Num1 => "Num1", Key::Num2 => "Num2",
+        Key::Num3 => "Num3", Key::Num4 => "Num4", Key::Num5 => "Num5",
+        Key::Num6 => "Num6", Key::Num7 => "Num7", Key::Num8 => "Num8",
+        Key::Num9 => "Num9",
+        Key::Tab => "Tab",
+        Key::Space => "Space",
+        Key::Enter => "Enter",
+        Key::Backspace => "Backspace",
+        Key::Delete => "Delete",
+        Key::Escape => "Escape",
+        Key::ArrowUp => "ArrowUp",
+        Key::ArrowDown => "ArrowDown",
+        Key::ArrowLeft => "ArrowLeft",
+        Key::ArrowRight => "ArrowRight",
+        Key::Home => "Home",
+        Key::End => "End",
+        Key::PageUp => "PageUp",
+        Key::PageDown => "PageDown",
+        Key::F1 => "F1", Key::F2 => "F2", Key::F3 => "F3",
+        Key::F4 => "F4", Key::F5 => "F5", Key::F6 => "F6",
+        Key::F7 => "F7", Key::F8 => "F8", Key::F9 => "F9",
+        Key::F10 => "F10", Key::F11 => "F11", Key::F12 => "F12",
+        Key::Minus => "Minus",
+        Key::Equals => "Equals",
+        Key::Comma => "Comma",
+        Key::Period => "Period",
+        Key::Slash => "Slash",
+        Key::Backslash => "Backslash",
+        Key::OpenBracket => "OpenBracket",
+        Key::CloseBracket => "CloseBracket",
+        Key::Semicolon => "Semicolon",
+        Key::Quote => "Quote",
+        _ => return None,
+    };
+    Some(name.into())
+}
+
+/// 处理按键捕获：在设置对话框快捷键标签页中消费按键事件。
+fn handle_keybinding_capture(
+    ctx: &egui::Context,
+    dialog: &mut SettingsDialog,
+) {
+    let Some(capture) = dialog.key_capture.as_ref() else {
+        return;
+    };
+    let capture_action = capture.action;
+    let mods = ctx.input(|i| i.modifiers);
+
+    // 至少需要一个修饰键（纯字母键不绑定）
+    if !mods.ctrl && !mods.shift && !mods.alt {
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            dialog.key_capture = None;
+        }
+        return;
+    }
+
+    // 扫描按键事件
+    let events = ctx.input(|i| i.events.clone());
+    for event in &events {
+        if let egui::Event::Key {
+            key,
+            pressed: true,
+            ..
+        } = event
+        {
+            // 忽略 Escape 键（取消捕获）
+            if *key == egui::Key::Escape {
+                dialog.key_capture = None;
+                continue;
+            }
+
+            if let Some(key_name) = key_name_from_egui(*key) {
+                // 再次确认有修饰键
+                if !mods.ctrl && !mods.shift && !mods.alt {
+                    continue;
+                }
+
+                let new_binding = config::KeyBinding {
+                    modifiers: config::Modifiers {
+                        ctrl: mods.ctrl,
+                        shift: mods.shift,
+                        alt: mods.alt,
+                    },
+                    key_name,
+                };
+
+                let conflict = dialog
+                    .keymap_buffer
+                    .detect_conflict(&capture_action, &new_binding);
+
+                dialog
+                    .keymap_buffer
+                    .set_override(capture_action, new_binding);
+                dialog.key_capture = Some(KeybindingCapture {
+                    action: capture_action,
+                    conflict_with: conflict,
+                });
+            }
+            break;
+        }
     }
 }
 
@@ -77,6 +211,8 @@ pub fn show_settings_dialog(
     if !dialog.open {
         return;
     }
+
+    handle_keybinding_capture(ctx, dialog);
 
     let mut close_this = false;
     let mut new_css = dialog.css_buffer.clone();
@@ -91,6 +227,7 @@ pub fn show_settings_dialog(
                 ui.selectable_value(&mut dialog.active_tab, SettingsTab::Css, "样式");
                 ui.selectable_value(&mut dialog.active_tab, SettingsTab::Image, "图片");
                 ui.selectable_value(&mut dialog.active_tab, SettingsTab::Spell, "拼写");
+                ui.selectable_value(&mut dialog.active_tab, SettingsTab::Keybind, "快捷键");
             });
             ui.separator();
 
@@ -167,6 +304,92 @@ pub fn show_settings_dialog(
                             .size(12.0),
                     );
                 }
+                SettingsTab::Keybind => {
+                    ui.horizontal(|ui| {
+                        ui.label("点击快捷键单元格后按下新组合键，Esc 取消");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("恢复全部默认").clicked() {
+                                dialog.keymap_buffer.clear_all();
+                                dialog.key_capture = None;
+                            }
+                        });
+                    });
+                    ui.add_space(4.0);
+
+                    egui::ScrollArea::vertical()
+                        .max_height(320.0)
+                        .show(ui, |ui| {
+                            egui::Grid::new("keybind_grid")
+                                .striped(true)
+                                .min_col_width(120.0)
+                                .show(ui, |ui| {
+                                    // 表头
+                                    ui.label(egui::RichText::new("操作").strong());
+                                    ui.label(egui::RichText::new("快捷键").strong());
+                                    ui.label("");
+                                    ui.end_row();
+
+                                    for action in config::Action::all() {
+                                        let binding = dialog.keymap_buffer.resolve(action);
+                                        let is_capturing = dialog
+                                            .key_capture
+                                            .as_ref()
+                                            .is_some_and(|c| c.action == *action);
+
+                                        // 冲突检测
+                                        let has_conflict = dialog
+                                            .keymap_buffer
+                                            .detect_conflict(action, &binding)
+                                            .is_some();
+
+                                        ui.label(action.display_name());
+
+                                        // 快捷键单元格
+                                        let cell_text = if is_capturing {
+                                            "⌛ 按下新快捷键..."
+                                        } else {
+                                            &binding.display()
+                                        };
+
+                                        let cell_rich = if is_capturing {
+                                            egui::RichText::new(cell_text)
+                                                .color(egui::Color32::from_rgb(100, 200, 255))
+                                                .strong()
+                                        } else if has_conflict {
+                                            egui::RichText::new(format!("⚠ {}", cell_text))
+                                                .color(egui::Color32::RED)
+                                        } else {
+                                            egui::RichText::new(cell_text).monospace()
+                                        };
+
+                                        if ui
+                                            .add(egui::Button::new(cell_rich).min_size(egui::vec2(160.0, 0.0)))
+                                            .clicked()
+                                        {
+                                            dialog.key_capture = Some(KeybindingCapture {
+                                                action: *action,
+                                                conflict_with: None,
+                                            });
+                                        }
+
+                                        // 恢复按钮
+                                        let is_modified = dialog.keymap_buffer.overrides.contains_key(action);
+                                        if is_modified {
+                                            if ui.button("↺").on_hover_text("恢复默认").clicked() {
+                                                dialog.keymap_buffer.clear_override(action);
+                                                if is_capturing {
+                                                    dialog.key_capture = None;
+                                                }
+                                            }
+                                        } else {
+                                            ui.label("");
+                                        }
+
+                                        ui.end_row();
+                                    }
+                                });
+                        });
+                }
             }
 
             ui.separator();
@@ -190,6 +413,9 @@ pub fn show_settings_dialog(
 
                     // 拼写检查设置
                     app_config.spell_check_enabled = dialog.spell_check_buffer;
+
+                    // 快捷键设置
+                    app_config.keymap = dialog.keymap_buffer.clone();
 
                     if let Err(e) = app_config.save() {
                         tracing::error!("配置保存失败: {e}");
@@ -218,7 +444,7 @@ mod tests {
     #[test]
     fn open_populates_buffer() {
         let mut dialog = SettingsDialog::default();
-        dialog.open_dialog(Some("h1{color:red}"), &Default::default(), true);
+        dialog.open_dialog(Some("h1{color:red}"), &Default::default(), true, &config::Keymap::default());
         assert!(dialog.open);
         assert_eq!(dialog.css_buffer, "h1{color:red}");
         assert_eq!(dialog.local_dir_buffer, "images");
@@ -227,7 +453,7 @@ mod tests {
     #[test]
     fn open_with_none_sets_empty_buffer() {
         let mut dialog = SettingsDialog::default();
-        dialog.open_dialog(None, &Default::default(), true);
+        dialog.open_dialog(None, &Default::default(), true, &config::Keymap::default());
         assert!(dialog.open);
         assert_eq!(dialog.css_buffer, "");
         assert_eq!(dialog.local_dir_buffer, "images");
@@ -245,7 +471,7 @@ mod tests {
     #[test]
     fn open_dialog_populates_spell_check_buffer() {
         let mut dialog = SettingsDialog::default();
-        dialog.open_dialog(None, &Default::default(), false);
+        dialog.open_dialog(None, &Default::default(), false, &config::Keymap::default());
         assert!(dialog.open);
         assert!(!dialog.spell_check_buffer);
     }
@@ -253,7 +479,7 @@ mod tests {
     #[test]
     fn open_dialog_default_spell_check_enabled() {
         let mut dialog = SettingsDialog::default();
-        dialog.open_dialog(None, &Default::default(), true);
+        dialog.open_dialog(None, &Default::default(), true, &config::Keymap::default());
         assert!(dialog.spell_check_buffer);
     }
 }

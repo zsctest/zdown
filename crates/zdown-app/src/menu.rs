@@ -102,6 +102,7 @@ pub fn show_menu(
                         app_config.custom_css.as_deref(),
                         &app_config.image_hosting,
                         app_config.spell_check_enabled,
+                        &app_config.keymap,
                     );
                     ui.close();
                 }
