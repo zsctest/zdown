@@ -39,7 +39,7 @@ pub fn show_menu(
     settings_dialog: &mut SettingsDialog,
     app_config: &AppConfig,
     theme: &mut ThemeMode,
-    image_hosting: &ImageHostingConfig,
+    _image_hosting: &ImageHostingConfig,
 ) {
     egui::TopBottomPanel::top("menu").show_inside(ui, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -340,82 +340,135 @@ pub(crate) fn trigger_browse_image(state: &mut EditorState, config: &ImageHostin
     }
 }
 
-/// 处理快捷键。
+/// 处理快捷键（查表驱动：从 AppConfig.keymap 读取绑定）。
 pub fn handle_shortcuts(
     ctx: &egui::Context,
     state: &mut EditorState,
     confirm: &mut ConfirmDialog,
+    view_mode: &mut ViewMode,
+    theme: &mut ThemeMode,
     app_config: &AppConfig,
 ) {
     let mods = ctx.input(|i| i.modifiers);
 
-    // Ctrl+S
-    if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::S)) {
-        if state.current_path().is_some() {
-            let _ = state.save();
-        } else {
-            trigger_save_as(state);
+    for action in config::Action::all() {
+        let binding = app_config.keymap.resolve(action);
+        if !mods_match(&mods, &binding.modifiers) {
+            continue;
         }
-        state.run_spell_check(app_config.spell_check_enabled);
-    }
-    // Ctrl+Shift+S
-    if mods.ctrl && mods.shift && ctx.input(|i| i.key_pressed(egui::Key::S)) {
-        trigger_save_as(state);
-        state.run_spell_check(app_config.spell_check_enabled);
-    }
-    // Ctrl+N
-    if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::N)) {
-        state.new_file();
-    }
-    // Ctrl+O
-    if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::O)) {
-        trigger_open(state);
-    }
-    // Ctrl+W — 关闭活跃标签页
-    if mods.ctrl
-        && !mods.shift
-        && ctx.input(|i| i.key_pressed(egui::Key::W))
-        && state.tab_count() > 1
-    {
-        let idx = state.active_tab_index();
-        if state.tab_is_dirty(idx) {
-            confirm.pending = Some(PendingAction::CloseTab(idx));
-        } else {
-            let removed = state.close_tab(idx);
-            if !removed {
-                state.new_file();
+        if let Some(key) = key_from_name(&binding.key_name) {
+            if ctx.input(|i| i.key_pressed(key)) {
+                execute_action(action, state, confirm, view_mode, theme, app_config);
             }
         }
     }
-    // Ctrl+Tab — 下一标签页
-    if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
-        state.next_tab();
+}
+
+/// 判断 egui 修饰键是否匹配绑定要求的修饰键。
+fn mods_match(actual: &egui::Modifiers, expected: &config::Modifiers) -> bool {
+    actual.ctrl == expected.ctrl
+        && actual.shift == expected.shift
+        && actual.alt == expected.alt
+}
+
+/// 将 key_name 字符串转换回 egui::Key。
+fn key_from_name(name: &str) -> Option<egui::Key> {
+    use egui::Key;
+    match name {
+        "S" => Some(Key::S),
+        "N" => Some(Key::N),
+        "O" => Some(Key::O),
+        "W" => Some(Key::W),
+        "Z" => Some(Key::Z),
+        "Y" => Some(Key::Y),
+        "T" => Some(Key::T),
+        "Tab" => Some(Key::Tab),
+        "ArrowLeft" => Some(Key::ArrowLeft),
+        "ArrowRight" => Some(Key::ArrowRight),
+        "Num1" => Some(Key::Num1),
+        "Num2" => Some(Key::Num2),
+        "Num3" => Some(Key::Num3),
+        _ => None,
     }
-    // Ctrl+Shift+Tab — 上一标签页
-    if mods.ctrl && mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
-        state.prev_tab();
-    }
-    // Ctrl+Shift+Left — 左移标签页
-    if mods.ctrl && mods.shift && ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
-        let idx = state.active_tab_index();
-        if idx > 0 {
-            state.move_tab(idx, idx - 1);
+}
+
+/// 根据 action 分发执行具体操作。
+fn execute_action(
+    action: &config::Action,
+    state: &mut EditorState,
+    confirm: &mut ConfirmDialog,
+    view_mode: &mut ViewMode,
+    theme: &mut ThemeMode,
+    app_config: &AppConfig,
+) {
+    match action {
+        config::Action::Save => {
+            if state.current_path().is_some() {
+                let _ = state.save();
+            } else {
+                trigger_save_as(state);
+            }
+            state.run_spell_check(app_config.spell_check_enabled);
         }
-    }
-    // Ctrl+Shift+Right — 右移标签页
-    if mods.ctrl && mods.shift && ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
-        let idx = state.active_tab_index();
-        state.move_tab(idx, idx + 1);
-    }
-    // Ctrl+Z
-    if mods.ctrl && !mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Z)) {
-        let _ = state.undo();
-    }
-    // Ctrl+Y 或 Ctrl+Shift+Z
-    if mods.ctrl
-        && ((!mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Y)))
-            || (mods.shift && ctx.input(|i| i.key_pressed(egui::Key::Z))))
-    {
-        let _ = state.redo();
+        config::Action::SaveAs => {
+            trigger_save_as(state);
+            state.run_spell_check(app_config.spell_check_enabled);
+        }
+        config::Action::NewFile => {
+            state.new_file();
+        }
+        config::Action::Open => {
+            trigger_open(state);
+        }
+        config::Action::CloseTab => {
+            if state.tab_count() > 1 {
+                let idx = state.active_tab_index();
+                if state.tab_is_dirty(idx) {
+                    confirm.pending = Some(PendingAction::CloseTab(idx));
+                } else {
+                    let removed = state.close_tab(idx);
+                    if !removed {
+                        state.new_file();
+                    }
+                }
+            }
+        }
+        config::Action::NextTab => {
+            state.next_tab();
+        }
+        config::Action::PrevTab => {
+            state.prev_tab();
+        }
+        config::Action::MoveTabLeft => {
+            let idx = state.active_tab_index();
+            if idx > 0 {
+                state.move_tab(idx, idx - 1);
+            }
+        }
+        config::Action::MoveTabRight => {
+            let idx = state.active_tab_index();
+            state.move_tab(idx, idx + 1);
+        }
+        config::Action::Undo => {
+            let _ = state.undo();
+        }
+        config::Action::Redo => {
+            let _ = state.redo();
+        }
+        config::Action::ViewSource => {
+            *view_mode = ViewMode::Source;
+        }
+        config::Action::ViewPreview => {
+            *view_mode = ViewMode::Preview;
+        }
+        config::Action::ViewHybrid => {
+            *view_mode = ViewMode::Hybrid;
+        }
+        config::Action::ToggleTheme => {
+            *theme = match theme {
+                ThemeMode::Dark => ThemeMode::Light,
+                ThemeMode::Light => ThemeMode::Dark,
+            };
+        }
     }
 }

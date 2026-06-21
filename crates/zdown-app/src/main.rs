@@ -143,7 +143,14 @@ impl eframe::App for ZdownApp {
                 tracing::error!("配置保存失败: {e}");
             }
         }
-        menu::handle_shortcuts(&ctx, &mut self.state, &mut self.confirm, &self.app_config);
+        menu::handle_shortcuts(
+            &ctx,
+            &mut self.state,
+            &mut self.confirm,
+            &mut self.view_mode,
+            &mut self.theme,
+            &self.app_config,
+        );
 
         // 搜索快捷键：Esc 关闭、Enter 导航（需在编辑器输入处理之前）
         if self.search.visible {
@@ -160,7 +167,6 @@ impl eframe::App for ZdownApp {
             }
         }
 
-        // 视图模式快捷键 Ctrl+1/2/3
         let mods = ctx.input(|i| i.modifiers);
 
         // Ctrl+F 切换搜索栏
@@ -172,18 +178,6 @@ impl eframe::App for ZdownApp {
                 self.search.search(&src);
             } else {
                 self.search.close();
-            }
-        }
-        if mods.ctrl && !mods.shift {
-            if ctx.input(|i| i.key_pressed(egui::Key::Num1)) {
-                self.view_mode = ViewMode::Source;
-                tracing::info!("切换到源码模式");
-            } else if ctx.input(|i| i.key_pressed(egui::Key::Num2)) {
-                self.view_mode = ViewMode::Preview;
-                tracing::info!("切换到预览模式");
-            } else if ctx.input(|i| i.key_pressed(egui::Key::Num3)) {
-                self.view_mode = ViewMode::Hybrid;
-                tracing::info!("切换到 Hybrid 模式");
             }
         }
 
