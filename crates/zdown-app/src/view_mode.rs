@@ -13,12 +13,12 @@ pub enum ViewMode {
 }
 
 impl ViewMode {
-    /// 中文名（菜单显示）。
+    /// 返回 FTL 翻译 key（由调用方通过 i18n 翻译）。
     pub fn label(self) -> &'static str {
         match self {
-            Self::Source => "源码",
-            Self::Preview => "预览",
-            Self::Hybrid => "Hybrid",
+            Self::Source => "view-source",
+            Self::Preview => "view-preview",
+            Self::Hybrid => "view-hybrid",
         }
     }
 }
