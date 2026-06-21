@@ -5,6 +5,7 @@ use eframe::egui;
 use config::{AppConfig, ImageHostingConfig, ThemeMode};
 
 use crate::editor_state::EditorState;
+use crate::settings_dialog::key_from_name;
 use crate::settings_dialog::SettingsDialog;
 use crate::view_mode::ViewMode;
 
@@ -147,8 +148,8 @@ pub fn show_menu(
 
                 // 主题切换：显示可切换到的目标主题
                 let toggle_label = match theme {
-                    ThemeMode::Dark => "☀️ 亮色主题",
-                    ThemeMode::Light => "🌙 暗色主题",
+                    ThemeMode::Dark => "\u{2600}\u{FE0F} 亮色主题",
+                    ThemeMode::Light => "\u{1F319} 暗色主题",
                 };
                 if ui.button(toggle_label).clicked() {
                     *theme = match theme {
@@ -370,27 +371,6 @@ fn mods_match(actual: &egui::Modifiers, expected: &config::Modifiers) -> bool {
     actual.ctrl == expected.ctrl
         && actual.shift == expected.shift
         && actual.alt == expected.alt
-}
-
-/// 将 key_name 字符串转换回 egui::Key。
-fn key_from_name(name: &str) -> Option<egui::Key> {
-    use egui::Key;
-    match name {
-        "S" => Some(Key::S),
-        "N" => Some(Key::N),
-        "O" => Some(Key::O),
-        "W" => Some(Key::W),
-        "Z" => Some(Key::Z),
-        "Y" => Some(Key::Y),
-        "T" => Some(Key::T),
-        "Tab" => Some(Key::Tab),
-        "ArrowLeft" => Some(Key::ArrowLeft),
-        "ArrowRight" => Some(Key::ArrowRight),
-        "Num1" => Some(Key::Num1),
-        "Num2" => Some(Key::Num2),
-        "Num3" => Some(Key::Num3),
-        _ => None,
-    }
 }
 
 /// 根据 action 分发执行具体操作。

@@ -41,7 +41,7 @@ pub struct SettingsDialog {
     strategy_buffer: usize, // 0=Local, 1=Base64, 2=SmMs
     /// 拼写检查开关缓冲区。
     spell_check_buffer: bool,
-    /// 快捷键映射的可变副本（编辑缓冲）。
+    /// 快捷键映射的可变副本（编辑缓存）。
     keymap_buffer: config::Keymap,
     /// 当前按键捕获状态。
     key_capture: Option<KeybindingCapture>,
@@ -134,6 +134,53 @@ fn key_name_from_egui(key: egui::Key) -> Option<String> {
         _ => return None,
     };
     Some(name.into())
+}
+
+/// 将 key_name 字符串转换回 egui::Key（key_name_from_egui 的逆向映射）。
+pub(crate) fn key_from_name(name: &str) -> Option<egui::Key> {
+    use egui::Key;
+    Some(match name {
+        "A" => Key::A, "B" => Key::B, "C" => Key::C, "D" => Key::D,
+        "E" => Key::E, "F" => Key::F, "G" => Key::G, "H" => Key::H,
+        "I" => Key::I, "J" => Key::J, "K" => Key::K, "L" => Key::L,
+        "M" => Key::M, "N" => Key::N, "O" => Key::O, "P" => Key::P,
+        "Q" => Key::Q, "R" => Key::R, "S" => Key::S, "T" => Key::T,
+        "U" => Key::U, "V" => Key::V, "W" => Key::W, "X" => Key::X,
+        "Y" => Key::Y, "Z" => Key::Z,
+        "Num0" => Key::Num0, "Num1" => Key::Num1, "Num2" => Key::Num2,
+        "Num3" => Key::Num3, "Num4" => Key::Num4, "Num5" => Key::Num5,
+        "Num6" => Key::Num6, "Num7" => Key::Num7, "Num8" => Key::Num8,
+        "Num9" => Key::Num9,
+        "Tab" => Key::Tab,
+        "Space" => Key::Space,
+        "Enter" => Key::Enter,
+        "Backspace" => Key::Backspace,
+        "Delete" => Key::Delete,
+        "Escape" => Key::Escape,
+        "ArrowUp" => Key::ArrowUp,
+        "ArrowDown" => Key::ArrowDown,
+        "ArrowLeft" => Key::ArrowLeft,
+        "ArrowRight" => Key::ArrowRight,
+        "Home" => Key::Home,
+        "End" => Key::End,
+        "PageUp" => Key::PageUp,
+        "PageDown" => Key::PageDown,
+        "F1" => Key::F1, "F2" => Key::F2, "F3" => Key::F3,
+        "F4" => Key::F4, "F5" => Key::F5, "F6" => Key::F6,
+        "F7" => Key::F7, "F8" => Key::F8, "F9" => Key::F9,
+        "F10" => Key::F10, "F11" => Key::F11, "F12" => Key::F12,
+        "Minus" => Key::Minus,
+        "Equals" => Key::Equals,
+        "Comma" => Key::Comma,
+        "Period" => Key::Period,
+        "Slash" => Key::Slash,
+        "Backslash" => Key::Backslash,
+        "OpenBracket" => Key::OpenBracket,
+        "CloseBracket" => Key::CloseBracket,
+        "Semicolon" => Key::Semicolon,
+        "Quote" => Key::Quote,
+        _ => return None,
+    })
 }
 
 /// 处理按键捕获：在设置对话框快捷键标签页中消费按键事件。
@@ -243,7 +290,7 @@ pub fn show_settings_dialog(
                             .font(egui::TextStyle::Monospace)
                             .desired_width(f32::INFINITY)
                             .hint_text(
-                                "/* 在此输入自定义 CSS，例如: */\nh1 { color: #2196F3; }\nbody { max-width: 900px; }",
+                                "/* 在此输入自定义 CSS，例如 */\nh1 { color: #2196F3; }\nbody { max-width: 900px; }",
                             ),
                     );
                 }
@@ -299,7 +346,7 @@ pub fn show_settings_dialog(
                     ui.add_space(8.0);
 
                     ui.label(
-                        egui::RichText::new("词典：English (United States) — en_US")
+                        egui::RichText::new("词典：English (United States) \u{2014} en_US")
                             .weak()
                             .size(12.0),
                     );
@@ -346,7 +393,7 @@ pub fn show_settings_dialog(
 
                                         // 快捷键单元格
                                         let cell_text = if is_capturing {
-                                            "⌛ 按下新快捷键..."
+                                            "\u{2318} 按下新快捷键..."
                                         } else {
                                             &binding.display()
                                         };
@@ -356,7 +403,7 @@ pub fn show_settings_dialog(
                                                 .color(egui::Color32::from_rgb(100, 200, 255))
                                                 .strong()
                                         } else if has_conflict {
-                                            egui::RichText::new(format!("⚠ {}", cell_text))
+                                            egui::RichText::new(format!("\u{26A0} {}", cell_text))
                                                 .color(egui::Color32::RED)
                                         } else {
                                             egui::RichText::new(cell_text).monospace()
@@ -375,7 +422,7 @@ pub fn show_settings_dialog(
                                         // 恢复按钮
                                         let is_modified = dialog.keymap_buffer.overrides.contains_key(action);
                                         if is_modified {
-                                            if ui.button("↺").on_hover_text("恢复默认").clicked() {
+                                            if ui.button("\u{21B6}").on_hover_text("恢复默认").clicked() {
                                                 dialog.keymap_buffer.clear_override(action);
                                                 if is_capturing {
                                                     dialog.key_capture = None;
