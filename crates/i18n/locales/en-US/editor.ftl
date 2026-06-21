@@ -16,3 +16,7 @@ outline-heading = 📑 Outline ({$count})
 outline-empty = (No headings)
 outline-empty-heading = (Empty heading)
 outline-image-prefix = Image:
+outline-filter-placeholder = Filter headings...
+outline-filter-count = { $count } matched
+outline-copy-toc = Copy as TOC (Markdown)
+outline-toc-copied = { $count } headings copied to clipboard

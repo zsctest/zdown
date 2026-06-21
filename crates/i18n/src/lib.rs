@@ -25,20 +25,23 @@ impl Lang {
         }
     }
 
-    /// 从字符串解析语言（不匹配时回退到中文）。
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "en-US" => Self::EnUS,
-            _ => Self::ZhCN,
-        }
-    }
-
     /// 返回用户可读的显示名。
     pub fn display_name(&self) -> &'static str {
         match self {
             Self::ZhCN => "中文",
             Self::EnUS => "English",
+        }
+    }
+}
+
+impl std::str::FromStr for Lang {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "zh-CN" => Ok(Self::ZhCN),
+            "en-US" => Ok(Self::EnUS),
+            _ => Err("unknown language tag; expected 'zh-CN' or 'en-US'"),
         }
     }
 }
@@ -201,9 +204,9 @@ mod tests {
 
     #[test]
     fn lang_as_str_roundtrip() {
-        assert_eq!(Lang::from_str("zh-CN"), Lang::ZhCN);
-        assert_eq!(Lang::from_str("en-US"), Lang::EnUS);
-        assert_eq!(Lang::from_str("unknown"), Lang::ZhCN);
+        assert_eq!("zh-CN".parse::<Lang>().unwrap(), Lang::ZhCN);
+        assert_eq!("en-US".parse::<Lang>().unwrap(), Lang::EnUS);
+        assert!("unknown".parse::<Lang>().is_err());
     }
 
     #[test]

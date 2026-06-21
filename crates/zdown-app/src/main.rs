@@ -63,6 +63,10 @@ struct ZdownApp {
     render_cache: markdown_renderer::RenderCache,
     /// 大纲面板折叠状态。
     fold_state: outline_view::OutlineFoldState,
+    /// 大纲面板拖拽排序状态。
+    outline_drag: outline_view::OutlineDragState,
+    /// 大纲面板搜索过滤状态。
+    outline_filter: outline_view::OutlineFilterState,
     /// 应用配置（持久化用户设置）。
     app_config: config::AppConfig,
     /// 设置对话框状态。
@@ -79,7 +83,10 @@ impl Default for ZdownApp {
     fn default() -> Self {
         let app_config = config::AppConfig::load().unwrap_or_default();
         let theme = app_config.theme.clone();
-        let lang = i18n::Lang::from_str(&app_config.lang);
+        let lang = app_config
+            .lang
+            .parse::<i18n::Lang>()
+            .unwrap_or(i18n::Lang::ZhCN);
         Self {
             state: EditorState::default(),
             confirm: ConfirmDialog::default(),
@@ -99,6 +106,8 @@ impl Default for ZdownApp {
             },
             render_cache: markdown_renderer::RenderCache::new(),
             fold_state: outline_view::OutlineFoldState::default(),
+            outline_drag: outline_view::OutlineDragState::default(),
+            outline_filter: outline_view::OutlineFilterState::default(),
             app_config,
             settings_dialog: settings_dialog::SettingsDialog::default(),
             search: SearchState::default(),
@@ -236,6 +245,8 @@ impl eframe::App for ZdownApp {
                     ui,
                     &mut self.state,
                     &mut self.fold_state,
+                    &mut self.outline_drag,
+                    &mut self.outline_filter,
                     &self.i18n,
                 );
             });
