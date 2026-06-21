@@ -2,6 +2,8 @@
 //!
 //! 存储用户偏好设置（自定义 CSS 等）到 TOML 文件。
 
+pub mod keybinding;
+
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
