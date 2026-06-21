@@ -91,6 +91,10 @@ pub struct AppConfig {
     /// 快捷键映射（delta 模式：仅存储用户覆盖）。
     #[serde(default)]
     pub keymap: Keymap,
+
+    /// 界面语言，值为 "zh-CN" 或 "en-US"。默认 "zh-CN"。
+    #[serde(default = "default_lang")]
+    pub lang: String,
 }
 
 impl Default for AppConfig {
@@ -101,6 +105,7 @@ impl Default for AppConfig {
             image_hosting: ImageHostingConfig::default(),
             spell_check_enabled: true,
             keymap: Keymap::default(),
+            lang: default_lang(),
         }
     }
 }
@@ -154,6 +159,10 @@ impl AppConfig {
 
 fn default_spell_check() -> bool {
     true
+}
+
+fn default_lang() -> String {
+    "zh-CN".to_string()
 }
 
 #[cfg(test)]
@@ -420,6 +429,28 @@ theme = "Dark"
         let loaded = AppConfig::load_from(&path).expect("load");
         assert!(loaded.keymap.overrides.is_empty());
         cleanup(&path);
+    }
+
+    #[test]
+    fn app_config_default_lang_is_zh_cn() {
+        let config = AppConfig::default();
+        assert_eq!(config.lang, "zh-CN");
+    }
+
+    #[test]
+    fn config_toml_contains_lang_field() {
+        let config = AppConfig::default();
+        let toml_str = toml::to_string_pretty(&config).expect("serialize");
+        assert!(
+            toml_str.contains("lang"),
+            "TOML 应包含 lang 字段: {}",
+            toml_str
+        );
+        assert!(
+            toml_str.contains("zh-CN"),
+            "TOML 应包含默认语言 zh-CN: {}",
+            toml_str
+        );
     }
 
     #[test]
