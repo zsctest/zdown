@@ -13,6 +13,7 @@ thiserror.workspace = true
 syntect = { workspace = true, features = ["default-syntaxes", "default-themes"] }
 egui.workspace = true
 document_model.workspace = true
+html_renderer.workspace = true
 mermaid_renderer.workspace = true
 resvg.workspace = true
 tiny-skia.workspace = true

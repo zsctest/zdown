@@ -29,7 +29,7 @@ fn render_block(ui: &mut egui::Ui, block: &Block) {
         }
         Block::Table(t) => render_table(ui, t),
         Block::HtmlBlock(s) => {
-            ui.label(egui::RichText::new(s).code().weak());
+            html_renderer::render_block_html(ui, s);
         }
     }
 }
@@ -107,7 +107,7 @@ fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline], font_id: &egui::FontId)
                 );
             }
             Inline::Html(s) => {
-                ui.label(egui::RichText::new(s).weak().font(font_id.clone()));
+                html_renderer::render_inline_html(ui, s, font_id);
             }
             Inline::SoftBreak => {
                 ui.label(egui::RichText::new(" ").font(font_id.clone()));
