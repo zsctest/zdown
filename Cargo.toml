@@ -17,6 +17,7 @@ members = [
     "crates/zdown-app",
     "crates/i18n",
     "crates/terminal_panel",
+    "crates/html_renderer",
 ]
 
 # ----------------------------------------------------------------------------
@@ -112,6 +113,11 @@ i18n = { path = "crates/i18n" }
 # ---------- terminal_panel ----------
 alacritty_terminal = "0.25"
 portable-pty = "0.9"
+
+# ---------- html_renderer ----------
+html5ever = "0.27"
+markup5ever = "0.12"
+html_renderer = { path = "crates/html_renderer" }
 
 [profile.release]
 lto = true
