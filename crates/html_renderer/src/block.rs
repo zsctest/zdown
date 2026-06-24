@@ -71,7 +71,7 @@ fn render_block_node(ui: &mut Ui, node: &HtmlNode) {
         HtmlNode::Inline { .. } => {
             // 内联节点出现在块级上下文：用默认字体渲染
             let font_id = egui::FontId::default();
-            inline::render_inline_nodes(ui, &[node.clone()], &font_id);
+            inline::render_inline_nodes(ui, std::slice::from_ref(node), &font_id);
         }
     }
 }
@@ -116,7 +116,7 @@ fn render_div_like(ui: &mut Ui, _tag: &BlockTag, style: &CssStyle, children: &[H
                     }
                     HtmlNode::Inline { .. } => {
                         let font_id = egui::FontId::default();
-                        inline::render_inline_nodes(ui, &[child.clone()], &font_id);
+                        inline::render_inline_nodes(ui, std::slice::from_ref(child), &font_id);
                     }
                 }
             }
@@ -216,8 +216,8 @@ fn extract_table_rows(nodes: &[HtmlNode]) -> Vec<Vec<String>> {
     let mut rows = vec![];
 
     for node in nodes {
-        match node {
-            HtmlNode::Block { tag, children, .. } => match tag {
+        if let HtmlNode::Block { tag, children, .. } = node {
+            match tag {
                 BlockTag::Tr => {
                     let mut row = vec![];
                     for child in children {
@@ -248,8 +248,7 @@ fn extract_table_rows(nodes: &[HtmlNode]) -> Vec<Vec<String>> {
                     rows.extend(extract_table_rows(children));
                 }
                 _ => {}
-            },
-            _ => {}
+            }
         }
     }
 

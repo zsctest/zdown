@@ -63,6 +63,7 @@ pub(crate) enum TagKind {
 
 /// DOM 节点。
 #[derive(Debug, Clone)]
+#[expect(dead_code)] // attrs fields for future use (e.g., block-level id/class)
 pub(crate) enum HtmlNode {
     Inline {
         tag: InlineTag,
@@ -487,7 +488,7 @@ fn convert_node(sink: &Sink, handle: Handle) -> Option<HtmlNode> {
                         None
                     } else {
                         // Flatten children into output
-                        return Some(flatten_or_first(children));
+                        Some(flatten_or_first(children))
                     }
                 }
             }
