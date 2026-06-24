@@ -54,7 +54,12 @@ pub(crate) struct Spacing {
 
 impl Spacing {
     pub fn uniform(v: f32) -> Self {
-        Self { top: v, right: v, bottom: v, left: v }
+        Self {
+            top: v,
+            right: v,
+            bottom: v,
+            left: v,
+        }
     }
 }
 
