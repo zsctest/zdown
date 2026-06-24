@@ -36,7 +36,14 @@ pub struct SettingsDialog {
     /// 图片设置缓冲区
     local_dir_buffer: String,
     smms_token_buffer: String,
-    strategy_buffer: usize, // 0=Local, 1=Base64, 2=SmMs
+    strategy_buffer: usize, // 0=Local, 1=Base64, 2=SmMs, 3=TencentCos
+    /// 腾讯云 COS 缓冲区
+    cos_secret_id_buffer: String,
+    cos_secret_key_buffer: String,
+    cos_bucket_buffer: String,
+    cos_region_buffer: String,
+    cos_custom_domain_buffer: String,
+    cos_upload_path_buffer: String,
     /// 拼写检查开关缓冲区。
     spell_check_buffer: bool,
     /// 快捷键映射的可变副本（编辑缓存）。
@@ -54,6 +61,12 @@ impl Default for SettingsDialog {
             local_dir_buffer: "images".to_string(),
             smms_token_buffer: String::new(),
             strategy_buffer: 0,
+            cos_secret_id_buffer: String::new(),
+            cos_secret_key_buffer: String::new(),
+            cos_bucket_buffer: String::new(),
+            cos_region_buffer: "ap-guangzhou".to_string(),
+            cos_custom_domain_buffer: String::new(),
+            cos_upload_path_buffer: "zdown/{year}/{month}".to_string(),
             spell_check_buffer: true,
             keymap_buffer: config::Keymap::default(),
             key_capture: None,
@@ -79,7 +92,14 @@ impl SettingsDialog {
             ImageStrategy::Local => 0,
             ImageStrategy::Base64 => 1,
             ImageStrategy::SmMs => 2,
+            ImageStrategy::TencentCos => 3,
         };
+        self.cos_secret_id_buffer = image_config.tencent_cos.secret_id.clone();
+        self.cos_secret_key_buffer = image_config.tencent_cos.secret_key.clone();
+        self.cos_bucket_buffer = image_config.tencent_cos.bucket.clone();
+        self.cos_region_buffer = image_config.tencent_cos.region.clone();
+        self.cos_custom_domain_buffer = image_config.tencent_cos.custom_domain.clone();
+        self.cos_upload_path_buffer = image_config.tencent_cos.upload_path.clone();
         self.spell_check_buffer = spell_check_enabled;
         self.keymap_buffer = keymap.clone();
         self.key_capture = None;
@@ -395,6 +415,11 @@ pub fn show_settings_dialog(
                             2,
                             i18n.t("settings-image-smms"),
                         );
+                        ui.selectable_value(
+                            &mut dialog.strategy_buffer,
+                            3,
+                            i18n.t("settings-image-tencent-cos"),
+                        );
                     });
                     ui.add_space(8.0);
 
@@ -417,6 +442,68 @@ pub fn show_settings_dialog(
                             .weak()
                             .size(12.0),
                     );
+
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    // 腾讯云 COS 配置
+                    ui.label(egui::RichText::new("腾讯云 COS").strong());
+                    ui.add_space(4.0);
+
+                    ui.label(i18n.t("settings-image-cos-secret-id"));
+                    ui.text_edit_singleline(&mut dialog.cos_secret_id_buffer);
+                    ui.add_space(4.0);
+
+                    ui.label(i18n.t("settings-image-cos-secret-key"));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.cos_secret_key_buffer)
+                            .password(true),
+                    );
+                    ui.add_space(4.0);
+
+                    ui.label(i18n.t("settings-image-cos-bucket"));
+                    ui.text_edit_singleline(&mut dialog.cos_bucket_buffer);
+                    ui.add_space(4.0);
+
+                    ui.label(i18n.t("settings-image-cos-region"));
+                    egui::ComboBox::from_id_salt("cos_region")
+                        .selected_text(&dialog.cos_region_buffer)
+                        .show_ui(ui, |ui| {
+                            for region in &[
+                                "ap-guangzhou",
+                                "ap-shanghai",
+                                "ap-beijing",
+                                "ap-nanjing",
+                                "ap-chengdu",
+                                "ap-chongqing",
+                            ] {
+                                ui.selectable_value(
+                                    &mut dialog.cos_region_buffer,
+                                    region.to_string(),
+                                    *region,
+                                );
+                            }
+                        });
+                    ui.add_space(4.0);
+
+                    ui.label(i18n.t("settings-image-cos-custom-domain"));
+                    ui.text_edit_singleline(&mut dialog.cos_custom_domain_buffer);
+                    ui.add_space(4.0);
+
+                    ui.label(i18n.t("settings-image-cos-upload-path"));
+                    ui.text_edit_singleline(&mut dialog.cos_upload_path_buffer);
+                    ui.add_space(4.0);
+
+                    ui.horizontal(|ui| {
+                        if ui.button(i18n.t("settings-image-cos-get-key")).clicked() {
+                            let _ = open::that("https://console.cloud.tencent.com/cam/capi");
+                        }
+                        ui.label(
+                            egui::RichText::new(i18n.t("settings-image-cos-hint"))
+                                .weak()
+                                .size(11.0),
+                        );
+                    });
                 }
                 SettingsTab::Spell => {
                     ui.label(i18n.t("settings-spell-label"));
@@ -572,10 +659,22 @@ pub fn show_settings_dialog(
                     app_config.image_hosting.default_strategy = match dialog.strategy_buffer {
                         1 => ImageStrategy::Base64,
                         2 => ImageStrategy::SmMs,
+                        3 => ImageStrategy::TencentCos,
                         _ => ImageStrategy::Local,
                     };
                     app_config.image_hosting.local_dir = dialog.local_dir_buffer.clone();
                     app_config.image_hosting.smms.api_token = dialog.smms_token_buffer.clone();
+                    // COS 设置
+                    app_config.image_hosting.tencent_cos.secret_id =
+                        dialog.cos_secret_id_buffer.clone();
+                    app_config.image_hosting.tencent_cos.secret_key =
+                        dialog.cos_secret_key_buffer.clone();
+                    app_config.image_hosting.tencent_cos.bucket = dialog.cos_bucket_buffer.clone();
+                    app_config.image_hosting.tencent_cos.region = dialog.cos_region_buffer.clone();
+                    app_config.image_hosting.tencent_cos.custom_domain =
+                        dialog.cos_custom_domain_buffer.clone();
+                    app_config.image_hosting.tencent_cos.upload_path =
+                        dialog.cos_upload_path_buffer.clone();
 
                     // 拼写检查设置
                     app_config.spell_check_enabled = dialog.spell_check_buffer;

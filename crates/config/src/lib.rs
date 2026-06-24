@@ -36,6 +36,7 @@ pub enum ImageStrategy {
     Local,
     Base64,
     SmMs,
+    TencentCos,
 }
 
 /// SM.MS 图床配置。
@@ -44,6 +45,37 @@ pub enum ImageStrategy {
 pub struct SmMsConfig {
     /// SM.MS API token（可选，无 token 也可上传但有限制）。
     pub api_token: String,
+}
+
+/// 腾讯云 COS 配置。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TencentCosConfig {
+    /// 腾讯云 SecretId。
+    pub secret_id: String,
+    /// 腾讯云 SecretKey。
+    pub secret_key: String,
+    /// 存储桶名称（含 APPID），如 "myblog-1250000000"。
+    pub bucket: String,
+    /// 地域，如 "ap-guangzhou"。
+    pub region: String,
+    /// 可选：自定义 CDN 域名（不含协议前缀）。
+    pub custom_domain: String,
+    /// 上传路径模板，支持 {year}/{month}/{day} 占位符。
+    pub upload_path: String,
+}
+
+impl Default for TencentCosConfig {
+    fn default() -> Self {
+        Self {
+            secret_id: String::new(),
+            secret_key: String::new(),
+            bucket: String::new(),
+            region: "ap-guangzhou".into(),
+            custom_domain: String::new(),
+            upload_path: "zdown/{year}/{month}".into(),
+        }
+    }
 }
 
 /// 图片托管配置。
@@ -56,6 +88,8 @@ pub struct ImageHostingConfig {
     pub local_dir: String,
     /// SM.MS 配置。
     pub smms: SmMsConfig,
+    /// 腾讯云 COS 配置。
+    pub tencent_cos: TencentCosConfig,
 }
 
 impl Default for ImageHostingConfig {
@@ -64,6 +98,7 @@ impl Default for ImageHostingConfig {
             default_strategy: ImageStrategy::Local,
             local_dir: "images".into(),
             smms: SmMsConfig::default(),
+            tencent_cos: TencentCosConfig::default(),
         }
     }
 }
@@ -316,6 +351,9 @@ mod tests {
         assert!(matches!(config.default_strategy, ImageStrategy::Local));
         assert_eq!(config.local_dir, "images");
         assert_eq!(config.smms.api_token, "");
+        assert_eq!(config.tencent_cos.secret_id, "");
+        assert_eq!(config.tencent_cos.region, "ap-guangzhou");
+        assert_eq!(config.tencent_cos.upload_path, "zdown/{year}/{month}");
     }
 
     #[test]
@@ -332,6 +370,14 @@ mod tests {
                 smms: SmMsConfig {
                     api_token: "token123".into(),
                 },
+                tencent_cos: TencentCosConfig {
+                    secret_id: "AKID_test".into(),
+                    secret_key: "secret_test".into(),
+                    bucket: "myblog-1250000000".into(),
+                    region: "ap-shanghai".into(),
+                    custom_domain: "cdn.example.com".into(),
+                    upload_path: "imgs/{year}".into(),
+                },
             },
             ..Default::default()
         };
@@ -343,6 +389,12 @@ mod tests {
         ));
         assert_eq!(loaded.image_hosting.local_dir, "assets");
         assert_eq!(loaded.image_hosting.smms.api_token, "token123");
+        assert_eq!(loaded.image_hosting.tencent_cos.bucket, "myblog-1250000000");
+        assert_eq!(loaded.image_hosting.tencent_cos.region, "ap-shanghai");
+        assert_eq!(
+            loaded.image_hosting.tencent_cos.custom_domain,
+            "cdn.example.com"
+        );
         cleanup(&path);
     }
 
@@ -357,7 +409,37 @@ mod tests {
             ImageStrategy::Local
         ));
         assert_eq!(loaded.image_hosting.local_dir, "images");
+        assert_eq!(loaded.image_hosting.tencent_cos.region, "ap-guangzhou");
         cleanup(&path);
+    }
+
+    #[test]
+    fn tencent_cos_config_default() {
+        let config = TencentCosConfig::default();
+        assert_eq!(config.secret_id, "");
+        assert_eq!(config.secret_key, "");
+        assert_eq!(config.bucket, "");
+        assert_eq!(config.region, "ap-guangzhou");
+        assert_eq!(config.custom_domain, "");
+        assert_eq!(config.upload_path, "zdown/{year}/{month}");
+    }
+
+    #[test]
+    fn image_strategy_tencent_cos_serialization() {
+        let config = AppConfig {
+            image_hosting: ImageHostingConfig {
+                default_strategy: ImageStrategy::TencentCos,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let toml_str = toml::to_string_pretty(&config).expect("serialize");
+        assert!(toml_str.contains("TencentCos"));
+        let restored: AppConfig = toml::from_str(&toml_str).expect("deserialize");
+        assert!(matches!(
+            restored.image_hosting.default_strategy,
+            ImageStrategy::TencentCos
+        ));
     }
 
     #[test]

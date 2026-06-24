@@ -103,6 +103,8 @@ spellbook = "0.4"
 # ---------- mermaid_renderer ----------
 flate2 = "1"
 sha2 = "0.10"
+sha1 = "0.10"
+hmac = "0.12"
 lru = "0.14"
 resvg = "0.46"
 tiny-skia = "0.11"

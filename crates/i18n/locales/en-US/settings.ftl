@@ -25,6 +25,15 @@ settings-image-local-dir-label = Local image directory:
 settings-image-smms-token-label = SM.MS API Token:
 settings-image-get-token = Get Token
 settings-image-token-hint = Upload works without a token, but has rate limits. Register on the website to get one.
+settings-image-tencent-cos = Tencent COS
+settings-image-cos-secret-id = SecretId:
+settings-image-cos-secret-key = SecretKey:
+settings-image-cos-bucket = Bucket name:
+settings-image-cos-region = Region:
+settings-image-cos-custom-domain = Custom CDN domain (optional):
+settings-image-cos-upload-path = Upload path:
+settings-image-cos-get-key = Get Key
+settings-image-cos-hint = Use a sub-account key with only COS write + public-read permissions
 
 # Spell tab
 settings-spell-label = English spell check:

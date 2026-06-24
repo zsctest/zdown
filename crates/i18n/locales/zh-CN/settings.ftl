@@ -25,6 +25,15 @@ settings-image-local-dir-label = 本地图片目录：
 settings-image-smms-token-label = SM.MS API Token：
 settings-image-get-token = 获取 Token
 settings-image-token-hint = 无 Token 也可上传，但有数量限制。注册后在网站获取。
+settings-image-tencent-cos = 腾讯云 COS
+settings-image-cos-secret-id = SecretId：
+settings-image-cos-secret-key = SecretKey：
+settings-image-cos-bucket = 存储桶名称：
+settings-image-cos-region = 地域：
+settings-image-cos-custom-domain = 自定义 CDN 域名（可选）：
+settings-image-cos-upload-path = 上传路径：
+settings-image-cos-get-key = 获取密钥
+settings-image-cos-hint = 建议使用子账号密钥，仅授予 COS 写入和公共读权限
 
 # 拼写标签页
 settings-spell-label = 英文拼写检查：
