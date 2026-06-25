@@ -34,6 +34,9 @@ settings-image-cos-custom-domain = 自定义 CDN 域名（可选）：
 settings-image-cos-upload-path = 上传路径：
 settings-image-cos-get-key = 获取密钥
 settings-image-cos-hint = 建议使用子账号密钥，仅授予 COS 写入和公共读权限
+settings-image-picgo = PicGo
+settings-image-picgo-port-label = PicGo Server 端口：
+settings-image-picgo-hint = 需先安装 PicGo 并用 picgo server 命令启动。默认端口 36677。
 
 # 拼写标签页
 settings-spell-label = 英文拼写检查：

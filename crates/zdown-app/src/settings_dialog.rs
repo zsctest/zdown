@@ -36,7 +36,9 @@ pub struct SettingsDialog {
     /// 图片设置缓冲区
     local_dir_buffer: String,
     smms_token_buffer: String,
-    strategy_buffer: usize, // 0=Local, 1=Base64, 2=SmMs, 3=TencentCos
+    strategy_buffer: usize, // 0=Local, 1=Base64, 2=SmMs, 3=TencentCos, 4=PicGo
+    /// PicGo 端口缓冲区
+    picgo_port_buffer: String,
     /// 腾讯云 COS 缓冲区
     cos_secret_id_buffer: String,
     cos_secret_key_buffer: String,
@@ -65,6 +67,7 @@ impl Default for SettingsDialog {
             cos_secret_key_buffer: String::new(),
             cos_bucket_buffer: String::new(),
             cos_region_buffer: "ap-guangzhou".to_string(),
+            picgo_port_buffer: "36677".to_string(),
             cos_custom_domain_buffer: String::new(),
             cos_upload_path_buffer: "zdown/{year}/{month}".to_string(),
             spell_check_buffer: true,
@@ -93,7 +96,9 @@ impl SettingsDialog {
             ImageStrategy::Base64 => 1,
             ImageStrategy::SmMs => 2,
             ImageStrategy::TencentCos => 3,
+            ImageStrategy::PicGo => 4,
         };
+        self.picgo_port_buffer = image_config.picgo.server_port.to_string();
         self.cos_secret_id_buffer = image_config.tencent_cos.secret_id.clone();
         self.cos_secret_key_buffer = image_config.tencent_cos.secret_key.clone();
         self.cos_bucket_buffer = image_config.tencent_cos.bucket.clone();
@@ -420,6 +425,11 @@ pub fn show_settings_dialog(
                             3,
                             i18n.t("settings-image-tencent-cos"),
                         );
+                        ui.selectable_value(
+                            &mut dialog.strategy_buffer,
+                            4,
+                            i18n.t("settings-image-picgo"),
+                        );
                     });
                     ui.add_space(8.0);
 
@@ -504,6 +514,23 @@ pub fn show_settings_dialog(
                                 .size(11.0),
                         );
                     });
+
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    // PicGo 桥接配置
+                    ui.label(egui::RichText::new("PicGo").strong());
+                    ui.add_space(4.0);
+
+                    ui.label(i18n.t("settings-image-picgo-port-label"));
+                    ui.text_edit_singleline(&mut dialog.picgo_port_buffer);
+                    ui.add_space(4.0);
+
+                    ui.label(
+                        egui::RichText::new(i18n.t("settings-image-picgo-hint"))
+                            .weak()
+                            .size(12.0),
+                    );
                 }
                 SettingsTab::Spell => {
                     ui.label(i18n.t("settings-spell-label"));
@@ -660,6 +687,7 @@ pub fn show_settings_dialog(
                         1 => ImageStrategy::Base64,
                         2 => ImageStrategy::SmMs,
                         3 => ImageStrategy::TencentCos,
+                        4 => ImageStrategy::PicGo,
                         _ => ImageStrategy::Local,
                     };
                     app_config.image_hosting.local_dir = dialog.local_dir_buffer.clone();
@@ -675,6 +703,9 @@ pub fn show_settings_dialog(
                         dialog.cos_custom_domain_buffer.clone();
                     app_config.image_hosting.tencent_cos.upload_path =
                         dialog.cos_upload_path_buffer.clone();
+                    // PicGo 设置
+                    app_config.image_hosting.picgo.server_port =
+                        dialog.picgo_port_buffer.parse().unwrap_or(36677);
 
                     // 拼写检查设置
                     app_config.spell_check_enabled = dialog.spell_check_buffer;
@@ -736,6 +767,7 @@ mod tests {
         assert_eq!(dialog.css_buffer, "");
         assert_eq!(dialog.local_dir_buffer, "images");
         assert_eq!(dialog.strategy_buffer, 0);
+        assert_eq!(dialog.picgo_port_buffer, "36677");
     }
 
     #[test]

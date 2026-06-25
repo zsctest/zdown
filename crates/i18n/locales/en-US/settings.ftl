@@ -34,6 +34,9 @@ settings-image-cos-custom-domain = Custom CDN domain (optional):
 settings-image-cos-upload-path = Upload path:
 settings-image-cos-get-key = Get Key
 settings-image-cos-hint = Use a sub-account key with only COS write + public-read permissions
+settings-image-picgo = PicGo
+settings-image-picgo-port-label = PicGo Server port:
+settings-image-picgo-hint = Install PicGo first and start with: picgo server. Default port: 36677.
 
 # Spell tab
 settings-spell-label = English spell check:

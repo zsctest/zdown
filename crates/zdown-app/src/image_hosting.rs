@@ -449,6 +449,86 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// PicGoStorage
+// ---------------------------------------------------------------------------
+
+/// PicGo 桥接存储：通过 PicGo HTTP Server 上传图片。
+///
+/// 需先安装 PicGo 并启动 server 模式：`picgo server -p <port>`。
+/// zdown 通过 HTTP multipart/form-data 将图片发送给 PicGo，
+/// PicGo 使用其当前配置的上传器完成云端上传。
+pub struct PicGoStorage {
+    pub server_port: u16,
+}
+
+impl ImageStorage for PicGoStorage {
+    fn store(&self, data: &[u8], filename: &str, format: ImageFormat) -> Result<String, String> {
+        let boundary = "----zdown_picgo_boundary_771";
+        let ext = format.extension();
+        let mime = format.mime_type();
+
+        // 构建 multipart/form-data body
+        let mut body = Vec::new();
+        let header = format!(
+            "------zdown_picgo_boundary_771\r\n\
+             Content-Disposition: form-data; name=\"file\"; filename=\"{filename}.{ext}\"\r\n\
+             Content-Type: {mime}\r\n\r\n"
+        );
+        body.extend_from_slice(header.as_bytes());
+        body.extend_from_slice(data);
+        let footer = "\r\n------zdown_picgo_boundary_771--\r\n";
+        body.extend_from_slice(footer.as_bytes());
+
+        let content_type = format!("multipart/form-data; boundary={boundary}");
+        let upload_url = format!("http://127.0.0.1:{}/upload", self.server_port);
+
+        let response = ureq::post(&upload_url)
+            .set("Content-Type", &content_type)
+            .set("User-Agent", "zdown/0.1")
+            .timeout(std::time::Duration::from_secs(60))
+            .send_bytes(&body)
+            .map_err(|e| {
+                let err_str = e.to_string();
+                if err_str.contains("Connection refused") || err_str.contains("连接被拒绝") {
+                    format!(
+                        "无法连接 PicGo Server (127.0.0.1:{})，\
+                         请确认已启动 picgo server",
+                        self.server_port
+                    )
+                } else if err_str.contains("timed out") || err_str.contains("Timeout") {
+                    format!(
+                        "PicGo Server (127.0.0.1:{}) 响应超时，请检查网络或 PicGo 状态",
+                        self.server_port
+                    )
+                } else {
+                    format!("PicGo 上传请求失败: {err_str}")
+                }
+            })?;
+
+        let body_text = response
+            .into_string()
+            .map_err(|e| format!("PicGo 读取响应失败: {e}"))?;
+
+        // 解析 PicGo HTTP Server 响应
+        let json: serde_json::Value = serde_json::from_str(&body_text)
+            .map_err(|e| format!("PicGo 解析响应失败: {e}，原始响应: {body_text}"))?;
+
+        if json["success"].as_bool() == Some(true) {
+            // 成功：result 是 URL 数组，取第一个
+            json["result"]
+                .as_array()
+                .and_then(|arr| arr.first())
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .ok_or_else(|| format!("PicGo 返回缺少有效 URL，原始响应: {body_text}"))
+        } else {
+            let msg = json["message"].as_str().unwrap_or("未知错误");
+            Err(format!("PicGo 上传失败: {msg}"))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 工厂函数
 // ---------------------------------------------------------------------------
 
@@ -473,6 +553,9 @@ pub fn create_storage(
             region: config.tencent_cos.region.clone(),
             custom_domain: config.tencent_cos.custom_domain.clone(),
             upload_path: config.tencent_cos.upload_path.clone(),
+        }),
+        ImageStrategy::PicGo => Box::new(PicGoStorage {
+            server_port: config.picgo.server_port,
         }),
     }
 }
@@ -682,5 +765,36 @@ mod tests {
     fn hex_encode_bytes() {
         assert_eq!(hex_encode(&[0xAB, 0xCD]), "abcd");
         assert_eq!(hex_encode(&[0x00, 0xFF]), "00ff");
+    }
+
+    // ── PicGoStorage 测试 ──
+
+    #[test]
+    fn picgo_storage_connection_refused() {
+        // 使用端口 0 确保连接被拒绝（通常无服务监听）
+        let storage = PicGoStorage { server_port: 0 };
+        let data = b"fake image data";
+        let result = storage.store(data, "test.png", ImageFormat::Png);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        // 不同平台报错信息不同（"Connection refused" / "地址无效" 等），
+        // 只需确认返回了错误即可。
+        assert!(
+            err.contains("PicGo"),
+            "expected PicGo-related error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn create_storage_picgo() {
+        let config = ImageHostingConfig {
+            default_strategy: ImageStrategy::PicGo,
+            picgo: config::PicGoConfig { server_port: 0 },
+            ..Default::default()
+        };
+        let storage = create_storage(&config, None);
+        let result = storage.store(b"test", "photo.png", ImageFormat::Png);
+        // 端口 0 无法连接，应返回错误
+        assert!(result.is_err());
     }
 }

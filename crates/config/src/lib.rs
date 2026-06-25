@@ -37,6 +37,8 @@ pub enum ImageStrategy {
     Base64,
     SmMs,
     TencentCos,
+    /// PicGo HTTP Server 桥接（需先启动 picgo server）。
+    PicGo,
 }
 
 /// SM.MS 图床配置。
@@ -78,6 +80,23 @@ impl Default for TencentCosConfig {
     }
 }
 
+/// PicGo 桥接配置。
+///
+/// zdown 通过 PicGo HTTP Server 模式（`picgo server`）上传图片，
+/// 从而复用 PicGo 已支持的 60+ 图床。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PicGoConfig {
+    /// PicGo HTTP Server 端口（默认 36677）。
+    pub server_port: u16,
+}
+
+impl Default for PicGoConfig {
+    fn default() -> Self {
+        Self { server_port: 36677 }
+    }
+}
+
 /// 图片托管配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -90,6 +109,8 @@ pub struct ImageHostingConfig {
     pub smms: SmMsConfig,
     /// 腾讯云 COS 配置。
     pub tencent_cos: TencentCosConfig,
+    /// PicGo 桥接配置。
+    pub picgo: PicGoConfig,
 }
 
 impl Default for ImageHostingConfig {
@@ -99,6 +120,7 @@ impl Default for ImageHostingConfig {
             local_dir: "images".into(),
             smms: SmMsConfig::default(),
             tencent_cos: TencentCosConfig::default(),
+            picgo: PicGoConfig::default(),
         }
     }
 }
@@ -354,6 +376,7 @@ mod tests {
         assert_eq!(config.tencent_cos.secret_id, "");
         assert_eq!(config.tencent_cos.region, "ap-guangzhou");
         assert_eq!(config.tencent_cos.upload_path, "zdown/{year}/{month}");
+        assert_eq!(config.picgo.server_port, 36677);
     }
 
     #[test]
@@ -378,6 +401,7 @@ mod tests {
                     custom_domain: "cdn.example.com".into(),
                     upload_path: "imgs/{year}".into(),
                 },
+                picgo: PicGoConfig { server_port: 36678 },
             },
             ..Default::default()
         };
@@ -395,6 +419,7 @@ mod tests {
             loaded.image_hosting.tencent_cos.custom_domain,
             "cdn.example.com"
         );
+        assert_eq!(loaded.image_hosting.picgo.server_port, 36678);
         cleanup(&path);
     }
 
@@ -410,6 +435,7 @@ mod tests {
         ));
         assert_eq!(loaded.image_hosting.local_dir, "images");
         assert_eq!(loaded.image_hosting.tencent_cos.region, "ap-guangzhou");
+        assert_eq!(loaded.image_hosting.picgo.server_port, 36677);
         cleanup(&path);
     }
 
@@ -422,6 +448,12 @@ mod tests {
         assert_eq!(config.region, "ap-guangzhou");
         assert_eq!(config.custom_domain, "");
         assert_eq!(config.upload_path, "zdown/{year}/{month}");
+    }
+
+    #[test]
+    fn picgo_config_default() {
+        let config = PicGoConfig::default();
+        assert_eq!(config.server_port, 36677);
     }
 
     #[test]
