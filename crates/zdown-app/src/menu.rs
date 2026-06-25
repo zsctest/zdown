@@ -264,7 +264,12 @@ fn trigger_export_pdf(state: &mut EditorState, i18n: &I18n) {
         if path.extension().is_none_or(|e| e != "pdf") {
             path.set_extension("pdf");
         }
-        let config = export_engine::PdfConfig::default();
+        let config = export_engine::PdfConfig {
+            working_dir: state
+                .current_path()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf())),
+            ..Default::default()
+        };
         let doc = state.current_doc();
         match export_engine::generate_pdf(&doc, &config) {
             Ok(pdf_bytes) => {
@@ -275,12 +280,17 @@ fn trigger_export_pdf(state: &mut EditorState, i18n: &I18n) {
                     state.status_message = i18n.tr("status-pdf-failed", Some(&args));
                 } else {
                     tracing::info!("PDF 导出成功: {}", path.display());
-                    state.status_message = format!("PDF exported: {}", path.display());
+                    let mut args = FluentArgs::new();
+                    args.set("path", path.display().to_string());
+                    state.status_message = i18n.tr("status-pdf-success", Some(&args));
                     state.recent.add(path);
                 }
             }
             Err(e) => {
                 tracing::error!("PDF 生成失败: {e}");
+                let mut args = FluentArgs::new();
+                args.set("error", e.to_string());
+                state.status_message = i18n.tr("status-pdf-failed", Some(&args));
             }
         }
     }
@@ -311,12 +321,17 @@ fn trigger_export_html(state: &mut EditorState, app_config: &AppConfig, i18n: &I
                     state.status_message = i18n.tr("status-html-failed", Some(&args));
                 } else {
                     tracing::info!("HTML 导出成功: {}", path.display());
-                    state.status_message = format!("HTML exported: {}", path.display());
+                    let mut args = FluentArgs::new();
+                    args.set("path", path.display().to_string());
+                    state.status_message = i18n.tr("status-html-success", Some(&args));
                     state.recent.add(path);
                 }
             }
             Err(e) => {
                 tracing::error!("HTML 生成失败: {e}");
+                let mut args = FluentArgs::new();
+                args.set("error", e.to_string());
+                state.status_message = i18n.tr("status-html-failed", Some(&args));
             }
         }
     }
