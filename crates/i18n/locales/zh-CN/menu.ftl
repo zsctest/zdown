@@ -8,6 +8,7 @@ menu-view = 视图
 # 文件菜单
 menu-file-new = 新建 (Ctrl+N)
 menu-file-open = 打开... (Ctrl+O)
+menu-file-open-folder = 打开文件夹...
 menu-file-save = 保存 (Ctrl+S)
 menu-file-save-as = 另存为... (Ctrl+Shift+S)
 menu-file-save-all = 保存所有

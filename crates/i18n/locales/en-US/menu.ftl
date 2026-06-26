@@ -8,6 +8,7 @@ menu-view = View
 # File menu
 menu-file-new = New (Ctrl+N)
 menu-file-open = Open... (Ctrl+O)
+menu-file-open-folder = Open Folder...
 menu-file-save = Save (Ctrl+S)
 menu-file-save-as = Save As... (Ctrl+Shift+S)
 menu-file-save-all = Save All
