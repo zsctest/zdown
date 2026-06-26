@@ -81,6 +81,8 @@ struct ZdownApp {
     i18n: I18n,
     /// 终端面板。
     terminal: TerminalPanel,
+    /// 文件树面板。
+    file_tree: file_tree::FileTreeState,
 }
 
 impl Default for ZdownApp {
@@ -118,6 +120,7 @@ impl Default for ZdownApp {
             theme,
             i18n: I18n::with_lang(lang),
             terminal: TerminalPanel::default(),
+            file_tree: file_tree::FileTreeState::default(),
         }
     }
 }
@@ -145,7 +148,19 @@ impl eframe::App for ZdownApp {
             &self.app_config.image_hosting,
             &self.i18n,
             &mut self.terminal,
+            &mut self.file_tree,
         );
+
+        // 拖拽文件夹到窗口：打开文件夹
+        ctx.input(|i| {
+            for file in &i.raw.dropped_files {
+                if let Some(path) = &file.path {
+                    if path.is_dir() {
+                        self.file_tree.open_folder(path);
+                    }
+                }
+            }
+        });
 
         // 主题切换时重建 highlighter + 保存配置
         if self.theme != theme_before {
@@ -250,20 +265,40 @@ impl eframe::App for ZdownApp {
 
         let highlighter = self.highlighter.as_ref();
 
-        // 大纲侧边栏 + 中央视图区域
+        // 大纲侧边栏 + 文件树 + 中央视图区域
         egui::SidePanel::left("outline_panel")
             .resizable(true)
             .default_width(200.0)
             .min_width(60.0)
             .show_inside(ui, |ui| {
-                outline_view::show_outline_panel(
-                    ui,
-                    &mut self.state,
-                    &mut self.fold_state,
-                    &mut self.outline_drag,
-                    &mut self.outline_filter,
-                    &self.i18n,
-                );
+                // 上半部：大纲面板
+                egui::TopBottomPanel::top("outline_section")
+                    .resizable(true)
+                    .min_height(60.0)
+                    .default_height(ui.available_height() * 0.5)
+                    .show_inside(ui, |ui| {
+                        outline_view::show_outline_panel(
+                            ui,
+                            &mut self.state,
+                            &mut self.fold_state,
+                            &mut self.outline_drag,
+                            &mut self.outline_filter,
+                            &self.i18n,
+                        );
+                    });
+
+                // 下半部：文件树面板
+                egui::TopBottomPanel::bottom("file_tree_section")
+                    .resizable(true)
+                    .min_height(40.0)
+                    .show_inside(ui, |ui| {
+                        file_tree::show_file_tree_panel(
+                            ui,
+                            &mut self.file_tree,
+                            &mut self.state,
+                            &self.i18n,
+                        );
+                    });
             });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {

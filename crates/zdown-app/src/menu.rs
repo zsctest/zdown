@@ -46,6 +46,7 @@ pub fn show_menu(
     _image_hosting: &ImageHostingConfig,
     i18n: &I18n,
     terminal: &mut TerminalPanel,
+    file_tree: &mut crate::file_tree::FileTreeState,
 ) {
     egui::TopBottomPanel::top("menu").show_inside(ui, |ui| {
         egui::menu::bar(ui, |ui| {
@@ -55,6 +56,9 @@ pub fn show_menu(
                 }
                 if ui.button(i18n.t("menu-file-open")).clicked() {
                     trigger_open(state, i18n);
+                }
+                if ui.button(i18n.t("menu-file-open-folder")).clicked() {
+                    trigger_open_folder(file_tree, i18n);
                 }
                 if ui.button(i18n.t("menu-file-save")).clicked() {
                     if state.current_path().is_none() {
@@ -248,6 +252,13 @@ fn trigger_open(state: &mut EditorState, i18n: &I18n) {
     let title = i18n.t("menu-file-open");
     if let Some(path) = workspace::pick_open_file(&title) {
         let _ = state.open(&path);
+    }
+}
+
+fn trigger_open_folder(file_tree: &mut crate::file_tree::FileTreeState, i18n: &I18n) {
+    let title = i18n.t("menu-file-open-folder");
+    if let Some(path) = workspace::pick_folder(&title) {
+        file_tree.open_folder(&path);
     }
 }
 

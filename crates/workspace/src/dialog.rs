@@ -54,9 +54,7 @@ pub fn pick_open_image(title: &str) -> Option<PathBuf> {
 
 /// 弹出选择文件夹对话框。用户取消或环境不支持时返回 None。
 pub fn pick_folder(title: &str) -> Option<PathBuf> {
-    rfd::FileDialog::new()
-        .set_title(title)
-        .pick_folder()
+    rfd::FileDialog::new().set_title(title).pick_folder()
 }
 
 #[cfg(test)]
