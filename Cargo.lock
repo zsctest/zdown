@@ -827,7 +827,7 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
  "serde",
@@ -1118,7 +1118,7 @@ dependencies = [
 
 [[package]]
 name = "document_model"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "editor_engine",
  "pulldown-cmark",
@@ -1169,7 +1169,7 @@ dependencies = [
 
 [[package]]
 name = "editor_engine"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "ropey",
  "thiserror 2.0.18",
@@ -1476,7 +1476,7 @@ dependencies = [
 
 [[package]]
 name = "export_engine"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "base64",
  "chrono",
@@ -2116,7 +2116,7 @@ dependencies = [
 
 [[package]]
 name = "html_renderer"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "egui",
  "html5ever",
@@ -2125,7 +2125,7 @@ dependencies = [
 
 [[package]]
 name = "i18n"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "fluent",
  "fluent-bundle",
@@ -2619,7 +2619,7 @@ checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
 name = "markdown_renderer"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "document_model",
  "egui",
@@ -2680,7 +2680,7 @@ dependencies = [
 
 [[package]]
 name = "mermaid_renderer"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "base64",
  "flate2",
@@ -4551,7 +4551,7 @@ dependencies = [
 
 [[package]]
 name = "spellcheck"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "spellbook",
  "thiserror 2.0.18",
@@ -4790,7 +4790,7 @@ dependencies = [
 
 [[package]]
 name = "terminal_panel"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
@@ -6327,7 +6327,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "workspace"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
  "document_model",
@@ -6556,7 +6556,7 @@ dependencies = [
 
 [[package]]
 name = "zdown-app"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "arboard",
  "base64",

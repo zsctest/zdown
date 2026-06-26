@@ -1,6 +1,7 @@
 //! zdown-app：egui 应用入口（阶段 2）。
 
 mod editor_state;
+mod file_tree;
 mod hybrid_view;
 mod image_hosting;
 mod input;
