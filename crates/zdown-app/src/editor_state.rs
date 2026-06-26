@@ -179,6 +179,20 @@ impl EditorState {
         before_count - self.tabs.len()
     }
 
+    /// 按路径关闭对应的标签页。返回是否执行了关闭操作。
+    pub fn close_tab_by_path(&mut self, path: &Path) -> bool {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if let Some(idx) = self.tabs.iter().position(|t| {
+            t.path
+                .as_ref()
+                .and_then(|p| p.canonicalize().ok())
+                .is_some_and(|p| p == canonical)
+        }) {
+            return self.close_tab(idx);
+        }
+        false
+    }
+
     /// 指定索引标签页的显示名称。
     pub fn tab_title(&self, index: usize) -> String {
         self.tabs
