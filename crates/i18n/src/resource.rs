@@ -16,6 +16,7 @@ pub(crate) fn create_bundle_zh_cn() -> FluentBundle<FluentResource> {
     add_resource(&mut bundle, include_str!("../locales/zh-CN/settings.ftl"));
     add_resource(&mut bundle, include_str!("../locales/zh-CN/editor.ftl"));
     add_resource(&mut bundle, include_str!("../locales/zh-CN/actions.ftl"));
+    add_resource(&mut bundle, include_str!("../locales/zh-CN/file-tree.ftl"));
 
     bundle
 }
@@ -29,6 +30,7 @@ pub(crate) fn create_bundle_en_us() -> FluentBundle<FluentResource> {
     add_resource(&mut bundle, include_str!("../locales/en-US/settings.ftl"));
     add_resource(&mut bundle, include_str!("../locales/en-US/editor.ftl"));
     add_resource(&mut bundle, include_str!("../locales/en-US/actions.ftl"));
+    add_resource(&mut bundle, include_str!("../locales/en-US/file-tree.ftl"));
 
     bundle
 }

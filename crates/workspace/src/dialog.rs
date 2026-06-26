@@ -52,6 +52,11 @@ pub fn pick_open_image(title: &str) -> Option<PathBuf> {
         .pick_file()
 }
 
+/// 弹出选择文件夹对话框。用户取消或环境不支持时返回 None。
+pub fn pick_folder(title: &str) -> Option<PathBuf> {
+    rfd::FileDialog::new().set_title(title).pick_folder()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -70,5 +75,11 @@ mod tests {
     #[ignore = "需要手动在桌面环境验证对话框弹窗"]
     fn pick_save_file_does_not_panic() {
         let _ = pick_save_file("Save Markdown File");
+    }
+
+    #[test]
+    #[ignore = "需要手动在桌面环境验证对话框弹窗"]
+    fn pick_folder_does_not_panic() {
+        let _ = pick_folder("Open Folder");
     }
 }
