@@ -250,9 +250,17 @@ pub fn show_file_tree_panel(
             let mut ctx_menu: Option<FileContextMenu> = None;
 
             for i in 0..node_count {
+                // 安全边界检查：handle_node_click 可能修改 nodes（展开/折叠），
+                // 导致数组长度变化。检查索引有效性，无效时跳出循环。
+                if i >= state.nodes.len() {
+                    break;
+                }
                 let resp = render_node(ui, state, i);
                 if resp.clicked() {
                     handle_node_click(state, i, editor_state);
+                    // 点击后状态已变更（展开/折叠修改了 nodes 数组），
+                    // 跳出循环，下一帧用更新后的状态重新渲染。
+                    break;
                 }
                 if resp.secondary_clicked() {
                     ctx_menu = Some(FileContextMenu {
