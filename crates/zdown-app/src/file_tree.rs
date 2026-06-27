@@ -320,7 +320,7 @@ fn render_node(ui: &mut egui::Ui, state: &FileTreeState, idx: usize) -> egui::Re
             .color(name_color)
             .size(13.0);
 
-        let resp = ui.add(egui::Label::new(name_text).sense(egui::Sense::hover()));
+        let resp = ui.selectable_label(false, name_text);
 
         if FileTreeState::is_markdown(&node.path) {
             resp.clone().on_hover_text(node.path.display().to_string())

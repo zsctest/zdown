@@ -46,6 +46,8 @@ pub struct EditorState {
     pub spell_checker: Option<SpellChecker>,
     /// 最近一次拼写检查的结果。
     pub spell_errors: Vec<SpellError>,
+    /// 标记编辑器视图应在下一帧请求焦点（new/open/切换标签页后）。
+    pub needs_focus: bool,
 }
 
 /// open / save 等操作的结果。
@@ -87,6 +89,7 @@ impl EditorState {
     pub fn switch_tab(&mut self, index: usize) {
         if index < self.tabs.len() {
             self.active_tab = index;
+            self.needs_focus = true;
         }
     }
 
@@ -234,13 +237,15 @@ impl EditorState {
             status_message: String::new(),
             spell_checker,
             spell_errors: Vec::new(),
+            needs_focus: true,
         }
     }
 
-    /// 新建文件：创建新标签页并切换到该页。
+    /// 新建文件：创建新的空标签页并切换到它。
     pub fn new_file(&mut self) {
         self.tabs.push(DocumentTab::empty());
         self.active_tab = self.tabs.len() - 1;
+        self.needs_focus = true;
     }
 
     /// 打开指定路径。
@@ -265,6 +270,7 @@ impl EditorState {
             self.active_tab = self.tabs.len() - 1;
         }
 
+        self.needs_focus = true;
         self.recent.add(path.to_path_buf());
         let _ = self.recent.save();
         Ok(())
@@ -559,6 +565,17 @@ mod tests {
     }
 
     #[test]
+    fn new_file_always_creates_new_tab_even_when_empty() {
+        let mut s = EditorState::new();
+        assert_eq!(s.tab_count(), 1);
+        assert_eq!(s.active_tab_index(), 0);
+        // 即使当前标签页为空，new_file 也创建新标签页
+        s.new_file();
+        assert_eq!(s.tab_count(), 2);
+        assert_eq!(s.active_tab_index(), 1);
+    }
+
+    #[test]
     fn open_reuses_empty_clean_tab() {
         let dir = TempDir::new().expect("tempdir");
         let path = dir.path().join("doc.md");
@@ -614,8 +631,24 @@ mod tests {
     #[test]
     fn close_tab_removes_correct_tab() {
         let mut s = EditorState::new();
-        s.new_file();
-        s.new_file();
+        // 创建 3 个标签页，各插入不同内容以便区分
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "a".into(),
+        })
+        .expect("apply");
+        s.new_file(); // tab 1
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "b".into(),
+        })
+        .expect("apply");
+        s.new_file(); // tab 2
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "c".into(),
+        })
+        .expect("apply");
         assert_eq!(s.tab_count(), 3);
         // 关闭中间的标签页 (index 1)
         s.close_tab(1);
@@ -636,8 +669,25 @@ mod tests {
     #[test]
     fn close_tab_adjusts_active_index() {
         let mut s = EditorState::new();
-        s.new_file();
-        s.new_file(); // tabs: [空, 空, 空], active=2
+        // 创建 3 个标签页，各插入不同内容以便区分
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "a".into(),
+        })
+        .expect("apply");
+        s.new_file(); // tab 1
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "b".into(),
+        })
+        .expect("apply");
+        s.new_file(); // tab 2
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "c".into(),
+        })
+        .expect("apply");
+        // tabs: [a, b, c], active=2
         s.switch_tab(1); // active=1
         let removed = s.close_tab(1);
         assert!(removed);
@@ -648,25 +698,31 @@ mod tests {
     #[test]
     fn undo_redo_per_tab() {
         let mut s = EditorState::new();
-        // tab 0: insert "A"
+        // tab 0: insert "A1" then "A2"
         s.apply(Command::Insert {
             pos: Cursor::new(0, 0),
-            text: "A".into(),
+            text: "A1".into(),
         })
         .expect("apply");
-        s.undo().expect("undo"); // tab 0: empty
-        // tab 1: insert "B"
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 2),
+            text: "A2".into(),
+        })
+        .expect("apply");
+        assert_eq!(s.editor().to_string(), "A1A2");
+        s.undo().expect("undo"); // tab 0: "A1", dirty (history still has undo_stack entries)
+        // 创建 tab 1
         s.new_file();
         s.apply(Command::Insert {
             pos: Cursor::new(0, 0),
             text: "B".into(),
         })
         .expect("apply");
-        // 切回 tab 0，重做
+        // 切回 tab 0，重做第一个 undo
         s.switch_tab(0);
-        assert_eq!(s.editor().to_string(), "");
+        assert_eq!(s.editor().to_string(), "A1");
         s.redo().expect("redo");
-        assert_eq!(s.editor().to_string(), "A");
+        assert_eq!(s.editor().to_string(), "A1A2");
         // 切回 tab 1，不做任何操作，内容应保持
         s.switch_tab(1);
         assert_eq!(s.editor().to_string(), "B");
@@ -799,9 +855,25 @@ mod tests {
     #[test]
     fn next_prev_tab_cycles() {
         let mut s = EditorState::new();
-        s.new_file();
-        s.new_file();
-        // tabs: [0:空, 1:空, 2:空], active=2
+        // 创建 3 个标签页并插入不同内容以便区分
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "a".into(),
+        })
+        .expect("apply");
+        s.new_file(); // tab 1
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "b".into(),
+        })
+        .expect("apply");
+        s.new_file(); // tab 2
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "c".into(),
+        })
+        .expect("apply");
+        // tabs: [a, b, c], active=2
         s.next_tab();
         assert_eq!(s.active_tab_index(), 0);
         s.next_tab();
@@ -815,9 +887,25 @@ mod tests {
     #[test]
     fn move_tab_left_and_right() {
         let mut s = EditorState::new();
-        s.new_file();
-        s.new_file();
-        // tabs: [空, 空1, 空2], active=2
+        // 创建 3 个标签页并插入不同内容以便区分
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "a".into(),
+        })
+        .expect("apply");
+        s.new_file(); // tab 1
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "b".into(),
+        })
+        .expect("apply");
+        s.new_file(); // tab 2
+        s.apply(Command::Insert {
+            pos: Cursor::new(0, 0),
+            text: "c".into(),
+        })
+        .expect("apply");
+        // tabs: [a, b, c], active=2
         s.move_tab(2, 0); // 移动到最前
         assert_eq!(s.active_tab_index(), 0);
         assert_eq!(s.tab_count(), 3);
@@ -830,9 +918,17 @@ mod tests {
     #[test]
     fn close_other_tabs_keeps_only_specified() {
         let mut s = EditorState::new();
-        s.new_file();
-        s.new_file();
-        s.new_file();
+        // 创建 4 个标签页并插入不同内容以便区分
+        for ch in ['a', 'b', 'c', 'd'] {
+            s.apply(Command::Insert {
+                pos: Cursor::new(0, 0),
+                text: ch.to_string(),
+            })
+            .expect("apply");
+            if ch != 'd' {
+                s.new_file();
+            }
+        }
         assert_eq!(s.tab_count(), 4);
         let closed = s.close_other_tabs(2);
         assert_eq!(closed, 3);
@@ -842,10 +938,18 @@ mod tests {
 
     #[test]
     fn close_tabs_to_right_removes_correct() {
-        let mut s = EditorState::new(); // tab 0
-        s.new_file(); // tab 1
-        s.new_file(); // tab 2
-        s.new_file(); // tab 3
+        let mut s = EditorState::new();
+        // 创建 4 个标签页并插入不同内容以便区分
+        for ch in ['a', 'b', 'c', 'd'] {
+            s.apply(Command::Insert {
+                pos: Cursor::new(0, 0),
+                text: ch.to_string(),
+            })
+            .expect("apply");
+            if ch != 'd' {
+                s.new_file();
+            }
+        }
         s.switch_tab(1);
         let closed = s.close_tabs_to_right(1);
         assert_eq!(closed, 2); // tabs 2, 3 closed

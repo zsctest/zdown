@@ -6567,6 +6567,7 @@ dependencies = [
  "egui",
  "export_engine",
  "fluent-bundle",
+ "font-kit",
  "hmac",
  "i18n",
  "image 0.23.14",

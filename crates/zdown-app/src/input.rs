@@ -292,3 +292,85 @@ fn rgba_to_png(img: &arboard::ImageData) -> Option<Vec<u8>> {
         .ok()?;
     Some(png_data.into_inner())
 }
+
+/// 在 `ui.interact()` 之前调用：从 egui 事件队列中提取并处理方向键，
+/// 防止 egui 将方向键用于焦点导航（而非光标移动）。
+///
+/// 仅在编辑器拥有焦点时才消费事件；否则放行供其他组件使用。
+pub(crate) fn consume_arrow_keys(ctx: &egui::Context, state: &mut EditorState, focus_id: egui::Id) {
+    // 编辑器没有焦点时，不拦截方向键（菜单等组件可能需要）
+    if !ctx.memory(|m| m.has_focus(focus_id)) {
+        return;
+    }
+
+    // 分离方向键 press 事件
+    let (arrow_events, rest): (Vec<_>, Vec<_>) = ctx.input_mut(|i| {
+        i.events.drain(..).partition(|e| {
+            matches!(
+                e,
+                egui::Event::Key {
+                    key: egui::Key::ArrowUp
+                        | egui::Key::ArrowDown
+                        | egui::Key::ArrowLeft
+                        | egui::Key::ArrowRight
+                        | egui::Key::Tab,
+                    pressed: true,
+                    ..
+                }
+            )
+        })
+    });
+    ctx.input_mut(|i| i.events = rest);
+
+    // 处理方向键 → 光标移动（Tab 暂不处理，仅拦截阻止焦点跳转）
+    for event in &arrow_events {
+        if let egui::Event::Key { key, .. } = event {
+            match key {
+                egui::Key::ArrowLeft => {
+                    let cursor = state.editor().cursor;
+                    if let Some(prev) = prev_cursor(&state.editor().buffer, cursor) {
+                        let _ = state.editor_mut().set_cursor(prev);
+                    }
+                }
+                egui::Key::ArrowRight => {
+                    let cursor = state.editor().cursor;
+                    if let Some(next) = next_cursor(&state.editor().buffer, cursor) {
+                        let _ = state.editor_mut().set_cursor(next);
+                    }
+                }
+                egui::Key::ArrowUp => {
+                    let cursor = state.editor().cursor;
+                    if cursor.line > 0 {
+                        let target_line = cursor.line - 1;
+                        let max_col = state
+                            .editor()
+                            .buffer
+                            .line_len_chars(target_line)
+                            .unwrap_or(0);
+                        let new_col = cursor.col.min(max_col);
+                        let _ = state
+                            .editor_mut()
+                            .set_cursor(Cursor::new(target_line, new_col));
+                    }
+                }
+                egui::Key::ArrowDown => {
+                    let cursor = state.editor().cursor;
+                    let line_count = state.editor().buffer.len_lines();
+                    if cursor.line + 1 < line_count {
+                        let target_line = cursor.line + 1;
+                        let max_col = state
+                            .editor()
+                            .buffer
+                            .line_len_chars(target_line)
+                            .unwrap_or(0);
+                        let new_col = cursor.col.min(max_col);
+                        let _ = state
+                            .editor_mut()
+                            .set_cursor(Cursor::new(target_line, new_col));
+                    }
+                }
+                _ => { /* Tab: 阶段 3 实现缩进前仅拦截 */ }
+            }
+        }
+    }
+}

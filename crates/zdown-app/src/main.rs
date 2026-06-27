@@ -1,5 +1,7 @@
 //! zdown-app：egui 应用入口（阶段 2）。
 
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 mod editor_state;
 mod file_tree;
 mod hybrid_view;
@@ -49,8 +51,89 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "zdown",
         options,
-        Box::new(|_cc| Ok(Box::new(ZdownApp::default()))),
+        Box::new(|cc| {
+            setup_egui_cjk_fonts(&cc.egui_ctx);
+            Ok(Box::new(ZdownApp::default()))
+        }),
     )
+}
+
+/// 配置 egui 字体以支持 CJK 字符渲染。
+/// Proportional 族：CJK 字体放在最前面，优先使用。
+/// Monospace 族：CJK 字体放在最后作为后备，
+/// 保持默认等宽字体渲染代码，只有默认字体缺失的字形才回退到 CJK。
+fn setup_egui_cjk_fonts(ctx: &egui::Context) {
+    if let Some(data) = find_system_cjk_font() {
+        let mut fonts = egui::FontDefinitions::default();
+        fonts
+            .font_data
+            .insert("CJK".to_owned(), egui::FontData::from_owned(data).into());
+        // Proportional: CJK 优先，保证 UI 中文正常渲染
+        if let Some(proportional) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+            proportional.insert(0, "CJK".to_owned());
+        }
+        // Monospace: CJK 作为后备，等宽字体优先保证代码对齐
+        if let Some(monospace) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
+            monospace.push("CJK".to_owned());
+        }
+        ctx.set_fonts(fonts);
+        tracing::info!("已加载系统 CJK 字体用于界面渲染");
+    } else {
+        tracing::warn!("未找到系统 CJK 字体，非 ASCII 字符可能显示为方块");
+    }
+}
+
+/// 使用 font-kit 在系统字体目录中查找支持 CJK 的字体。
+fn find_system_cjk_font() -> Option<Vec<u8>> {
+    use font_kit::family_name::FamilyName;
+    use font_kit::properties::Properties;
+    use font_kit::source::SystemSource;
+
+    let source = SystemSource::new();
+
+    // 按优先级排列的 CJK 字体名列表（分平台）
+    let candidates: &[&str] = if cfg!(target_os = "windows") {
+        &["Microsoft YaHei", "SimHei", "SimSun", "FangSong", "KaiTi"]
+    } else if cfg!(target_os = "macos") {
+        &[
+            "PingFang SC",
+            "PingFang TC",
+            "Hiragino Sans GB",
+            "Heiti SC",
+            "STHeiti",
+        ]
+    } else {
+        &[
+            "Noto Sans CJK SC",
+            "Noto Sans SC",
+            "Source Han Sans SC",
+            "WenQuanYi Micro Hei",
+            "WenQuanYi Zen Hei",
+        ]
+    };
+
+    for name in candidates {
+        let handle = match source
+            .select_best_match(&[FamilyName::Title(name.to_string())], &Properties::new())
+        {
+            Ok(h) => h,
+            Err(_) => continue,
+        };
+
+        let data = match handle {
+            font_kit::handle::Handle::Path { path, .. } => std::fs::read(path).ok(),
+            font_kit::handle::Handle::Memory { bytes, .. } => Some((*bytes).clone()),
+        };
+
+        if let Some(data) = data {
+            if !data.is_empty() {
+                tracing::info!("找到系统 CJK 字体: {name}");
+                return Some(data);
+            }
+        }
+    }
+
+    None
 }
 
 struct ZdownApp {
@@ -83,6 +166,8 @@ struct ZdownApp {
     terminal: TerminalPanel,
     /// 文件树面板。
     file_tree: file_tree::FileTreeState,
+    /// 左侧面板竖分割比例（大纲占比，0.0~1.0）。
+    side_split_ratio: f32,
 }
 
 impl Default for ZdownApp {
@@ -121,6 +206,7 @@ impl Default for ZdownApp {
             i18n: I18n::with_lang(lang),
             terminal: TerminalPanel::default(),
             file_tree: file_tree::FileTreeState::default(),
+            side_split_ratio: 0.5,
         }
     }
 }
@@ -271,34 +357,86 @@ impl eframe::App for ZdownApp {
             .default_width(200.0)
             .min_width(60.0)
             .show_inside(ui, |ui| {
+                let available = ui.available_height();
+                let handle_height = 6.0;
+                let min_top = 60.0;
+                let min_bottom = 40.0;
+                let split = self.side_split_ratio.clamp(0.1, 0.9);
+
+                let top_h = ((available - handle_height) * split)
+                    .max(min_top)
+                    .min(available - handle_height - min_bottom);
+
                 // 上半部：大纲面板
-                egui::TopBottomPanel::top("outline_section")
-                    .resizable(true)
-                    .min_height(60.0)
-                    .default_height(ui.available_height() * 0.5)
-                    .show_inside(ui, |ui| {
-                        outline_view::show_outline_panel(
-                            ui,
-                            &mut self.state,
-                            &mut self.fold_state,
-                            &mut self.outline_drag,
-                            &mut self.outline_filter,
-                            &self.i18n,
-                        );
-                    });
+                let top_rect = ui.available_rect_before_wrap();
+                let top_rect =
+                    egui::Rect::from_min_size(top_rect.min, egui::vec2(top_rect.width(), top_h));
+                ui.allocate_ui_at_rect(top_rect, |ui| {
+                    ui.set_min_height(min_top);
+                    outline_view::show_outline_panel(
+                        ui,
+                        &mut self.state,
+                        &mut self.fold_state,
+                        &mut self.outline_drag,
+                        &mut self.outline_filter,
+                        &self.i18n,
+                    );
+                });
+
+                // 拖拽手柄
+                let handle_rect = egui::Rect::from_min_size(
+                    egui::pos2(top_rect.min.x, top_rect.max.y),
+                    egui::vec2(top_rect.width(), handle_height),
+                );
+                let handle_id = ui.make_persistent_id("side_split_handle");
+                let handle_resp = ui.interact(handle_rect, handle_id, egui::Sense::drag());
+
+                if handle_resp.dragged() {
+                    if let Some(pos) = ui.ctx().pointer_latest_pos() {
+                        let panel_top = ui.available_rect_before_wrap().min.y;
+                        let panel_h = available;
+                        let new_ratio = (pos.y - panel_top) / panel_h;
+                        self.side_split_ratio = new_ratio.clamp(0.1, 0.9);
+                    }
+                }
+
+                // 视觉手柄
+                if ui.is_rect_visible(handle_rect) {
+                    let painter = ui.painter();
+                    let color = if handle_resp.hovered() || handle_resp.dragged() {
+                        egui::Color32::GRAY
+                    } else {
+                        egui::Color32::from_gray(80)
+                    };
+                    let center_y = handle_rect.center().y;
+                    let left = handle_rect.min.x + 8.0;
+                    let right = handle_rect.max.x - 8.0;
+                    painter.line_segment(
+                        [egui::pos2(left, center_y), egui::pos2(right, center_y)],
+                        egui::Stroke::new(2.0, color),
+                    );
+                }
+
+                // 设置游标样式
+                if handle_resp.hovered() || handle_resp.dragged() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                }
 
                 // 下半部：文件树面板
-                egui::TopBottomPanel::bottom("file_tree_section")
-                    .resizable(true)
-                    .min_height(40.0)
-                    .show_inside(ui, |ui| {
-                        file_tree::show_file_tree_panel(
-                            ui,
-                            &mut self.file_tree,
-                            &mut self.state,
-                            &self.i18n,
-                        );
-                    });
+                let bottom_h = available - top_h - handle_height;
+                let bottom_rect = egui::Rect::from_min_size(
+                    egui::pos2(handle_rect.min.x, handle_rect.max.y),
+                    egui::vec2(handle_rect.width(), bottom_h),
+                );
+                ui.allocate_ui_at_rect(bottom_rect, |ui| {
+                    ui.set_min_height(min_bottom);
+                    file_tree::show_file_tree_panel(
+                        ui,
+                        &mut self.file_tree,
+                        &mut self.state,
+                        &self.i18n,
+                    );
+                });
             });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {

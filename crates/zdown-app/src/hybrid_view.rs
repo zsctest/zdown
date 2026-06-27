@@ -30,14 +30,27 @@ pub fn show_hybrid_view(
     // 先处理输入（复用 source_view 的 prev_cursor/next_cursor + 同样的键处理逻辑）
     let ctx = ui.ctx().clone();
     let focus_id = egui::Id::new(("hybrid_view_input", state.active_tab_index()));
+    // 必须在 interact 之前消费方向键，否则 egui 会将其用于焦点导航
+    crate::input::consume_arrow_keys(&ctx, state, focus_id);
     let input_response = ui.interact(ui.max_rect(), focus_id, egui::Sense::click_and_drag());
+    // 显式焦点请求（new/open/切换标签页）：每帧持续请求直到实际获得焦点，
+    // 避免因弹出层（菜单等）覆盖而提前消费 needs_focus 标志。
+    if state.needs_focus {
+        ctx.memory_mut(|m| m.request_focus(focus_id));
+    }
     if input_response.has_focus() {
+        // 清除 begin_pass 中基于 RawInput.events 设置的焦点导航方向，
+        // 阻止 egui 将方向键用于焦点跳转（编辑器已自行处理方向键）。
+        ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         let wd = state
             .current_path()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()));
         crate::input::handle_input(&ctx, state, app_config, wd);
+        // 确认焦点已获得，消费 needs_focus
+        state.needs_focus = false;
     }
-    if input_response.clicked() {
+    // 点击获取焦点，或全局无焦点时自动获取
+    if input_response.clicked() || ctx.memory(|m| m.focused()).is_none() {
         ctx.memory_mut(|m| m.request_focus(focus_id));
     }
 
