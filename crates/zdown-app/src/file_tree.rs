@@ -287,48 +287,66 @@ fn render_node(ui: &mut egui::Ui, state: &FileTreeState, idx: usize) -> egui::Re
     let node = &state.nodes[idx];
     let indent = node.depth as f32 * 16.0;
 
-    ui.horizontal(|ui| {
-        ui.add_space(indent);
+    // 分配整行宽度的交互区域，使用 Sense::click() 确保点击能被检测到
+    let row_height = 20.0;
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), row_height),
+        egui::Sense::click(),
+    );
 
-        if node.is_dir {
-            let expanded = state.is_expanded(&node.path);
-            let arrow = if expanded { "\u{25BC}" } else { "\u{25B6}" };
-            ui.add(egui::Label::new(egui::RichText::new(arrow).size(11.0)));
-        } else {
-            ui.add_space(16.0);
-        }
+    // 鼠标悬停时的高亮背景
+    if response.hovered() {
+        ui.painter()
+            .rect_filled(rect, 0.0, egui::Color32::from_gray(45));
+    }
 
-        let icon = if node.is_dir {
-            if state.is_expanded(&node.path) {
-                "\u{1F4C2}"
+    // 在分配好的区域内渲染内容
+    #[allow(deprecated)]
+    ui.allocate_ui_at_rect(rect, |ui| {
+        ui.horizontal(|ui| {
+            ui.add_space(indent);
+
+            if node.is_dir {
+                let expanded = state.is_expanded(&node.path);
+                let arrow = if expanded { "\u{25BC}" } else { "\u{25B6}" };
+                ui.add(egui::Label::new(egui::RichText::new(arrow).size(11.0)));
             } else {
-                "\u{1F4C1}"
+                ui.add_space(16.0);
             }
-        } else if FileTreeState::is_markdown(&node.path) {
-            "\u{1F4DD}"
-        } else {
-            "\u{1F4C4}"
-        };
 
-        let name_color = if FileTreeState::is_markdown(&node.path) {
-            egui::Color32::WHITE
-        } else {
-            egui::Color32::from_gray(160)
-        };
+            let icon = if node.is_dir {
+                if state.is_expanded(&node.path) {
+                    "\u{1F4C2}"
+                } else {
+                    "\u{1F4C1}"
+                }
+            } else if FileTreeState::is_markdown(&node.path) {
+                "\u{1F4DD}"
+            } else {
+                "\u{1F4C4}"
+            };
 
-        let name_text = egui::RichText::new(format!("{icon} {}", node.name))
-            .color(name_color)
-            .size(13.0);
+            let name_color = if FileTreeState::is_markdown(&node.path) {
+                egui::Color32::WHITE
+            } else {
+                egui::Color32::from_gray(160)
+            };
 
-        let resp = ui.selectable_label(false, name_text);
+            ui.label(
+                egui::RichText::new(format!("{icon} {}", node.name))
+                    .color(name_color)
+                    .size(13.0),
+            );
+        });
+    });
 
-        if FileTreeState::is_markdown(&node.path) {
-            resp.clone().on_hover_text(node.path.display().to_string())
-        } else {
-            resp
-        }
-    })
-    .response
+    if FileTreeState::is_markdown(&node.path) {
+        response
+            .clone()
+            .on_hover_text(node.path.display().to_string())
+    } else {
+        response
+    }
 }
 
 fn handle_node_click(state: &mut FileTreeState, idx: usize, editor_state: &mut EditorState) {
