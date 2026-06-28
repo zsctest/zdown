@@ -21,6 +21,7 @@ pub fn render(
     image_cache: &mut ImageCache,
     working_dir: Option<&Path>,
 ) {
+    image_cache.poll_pending(ui.ctx());
     for bws in &doc.blocks {
         render_block(ui, &bws.block, image_cache, working_dir);
     }

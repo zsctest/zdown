@@ -3,27 +3,38 @@
 //! 负责从 data URI、远程 URL 或本地路径加载图片，
 //! 并将结果缓存为 `Arc<egui::ColorImage>`，避免逐帧重复下载。
 //!
+//! - data URI / 本地文件：同步加载（毫秒级）。
+//! - 远程 URL：后台线程加载，不阻塞 UI；完成后通过 `poll_pending` 收集结果
+//!   并自动 `request_repaint`。
+//!
 //! LRU 上限 20 条，超出丢弃最旧。失败 URL 记录在独立集合中，
 //! 会随 LRU 淘汰一起清理。
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Read;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+/// 后台加载任务的共享槽位：下载线程写入结果，主线程通过 `try_lock` 轮询。
+type PendingSlot = Arc<Mutex<Option<Result<egui::ColorImage, String>>>>;
 
 /// 图片缓存。key 为 URL，value 为已加载的 egui 图片数据。
 /// 失败 URL 记录在 `failed` 集合中，避免重复重试。
 ///
 /// 同时缓存 `TextureId`，避免每帧调用 `load_texture` 触发
 /// egui 0.34 的纹理替换导致图片闪烁。
+///
+/// 远程图片通过后台线程加载，`poll_pending` 负责收尾。
 pub struct ImageCache {
     images: VecDeque<(String, Arc<egui::ColorImage>)>,
-    /// 缓存已注册的纹理 ID（key 为 URL 的 hash），
+    /// 缓存已注册的纹理 ID（key 为 URL），
     /// 避免每帧 `load_texture` 重新上传相同像素数据。
     texture_ids: HashMap<String, egui::TextureId>,
     failed: HashSet<String>,
     max_entries: usize,
+    /// 正在通过后台线程加载的远程图片。
+    pending: HashMap<String, PendingSlot>,
 }
 
 impl Default for ImageCache {
@@ -33,6 +44,7 @@ impl Default for ImageCache {
             texture_ids: HashMap::new(),
             failed: HashSet::new(),
             max_entries: 20,
+            pending: HashMap::new(),
         }
     }
 }
@@ -51,12 +63,16 @@ impl ImageCache {
             texture_ids: HashMap::new(),
             failed: HashSet::new(),
             max_entries,
+            pending: HashMap::new(),
         }
     }
 
-    /// 获取或加载图片。命中缓存直接返回；失败过的不再重试。
+    /// 获取或加载图片。
     ///
-    /// 缓存命中时将该条目提升为最新（LRU）。
+    /// - 缓存命中 / 失败过 → 立即返回
+    /// - 远程 URL → 后台线程加载，返回 `None`（等 `poll_pending` 收尾）
+    /// - data URI / 本地文件 → 同步加载（毫秒级，不阻塞感知）
+    ///
     /// `working_dir` 用于解析本地相对路径，仅对本地文件 URL 有效。
     pub fn get_or_load(
         &mut self,
@@ -73,14 +89,33 @@ impl ImageCache {
         if self.failed.contains(url) {
             return None;
         }
-        // 加载
+        // 正在后台加载
+        if self.pending.contains_key(url) {
+            return None;
+        }
+        // 远程 URL → 后台线程加载，避免阻塞 UI
+        if url.starts_with("http://") || url.starts_with("https://") {
+            let url_owned = url.to_owned();
+            // ponyail: one thread per image, pool only if >20 concurrent images
+            let slot: PendingSlot = Arc::new(Mutex::new(None));
+            let slot_clone = Arc::clone(&slot);
+            std::thread::spawn(move || {
+                let result = load_from_remote(&url_owned);
+                // 写入失败无害：最坏情况下 poll_pending 下一帧重试
+                if let Ok(mut guard) = slot_clone.lock() {
+                    *guard = Some(result);
+                }
+            });
+            self.pending.insert(url.to_owned(), slot);
+            return None;
+        }
+        // data URI / 本地文件 → 同步加载
         match load_image(url, working_dir) {
             Ok(color_image) => {
                 let arc = Arc::new(color_image);
                 // LRU 淘汰
                 while self.images.len() >= self.max_entries {
                     if let Some((old_key, _)) = self.images.pop_back() {
-                        // 对应的失败记录、纹理 ID 一并清理
                         self.failed.remove(&old_key);
                         self.texture_ids.remove(&old_key);
                     }
@@ -94,6 +129,52 @@ impl ImageCache {
                 None
             }
         }
+    }
+
+    /// 轮询后台加载结果，将已完成的移至缓存。
+    ///
+    /// 应在每帧渲染前调用。有结果时自动 `ctx.request_repaint()`。
+    pub fn poll_pending(&mut self, ctx: &egui::Context) {
+        // 快速路径：无 pending 直接返回
+        if self.pending.is_empty() {
+            return;
+        }
+
+        let mut completed: Vec<(String, Result<egui::ColorImage, String>)> = Vec::new();
+        for (url, slot) in &self.pending {
+            // try_lock 而非 lock：避免下载线程持锁时阻塞渲染
+            if let Ok(mut guard) = slot.try_lock() {
+                if let Some(result) = guard.take() {
+                    completed.push((url.clone(), result));
+                }
+            }
+        }
+
+        if completed.is_empty() {
+            return;
+        }
+
+        for (url, result) in completed {
+            self.pending.remove(&url);
+            match result {
+                Ok(color_image) => {
+                    let arc = Arc::new(color_image);
+                    while self.images.len() >= self.max_entries {
+                        if let Some((old_key, _)) = self.images.pop_back() {
+                            self.failed.remove(&old_key);
+                            self.texture_ids.remove(&old_key);
+                        }
+                    }
+                    self.images.push_front((url.clone(), Arc::clone(&arc)));
+                    tracing::debug!("远程图片加载完成 [{url}]");
+                }
+                Err(e) => {
+                    tracing::warn!("图片加载失败 [{url}]: {e}");
+                    self.failed.insert(url);
+                }
+            }
+        }
+        ctx.request_repaint();
     }
 
     /// 获取缓存的纹理 ID（存在则返回 `Some`，否则 `None`）。
@@ -113,6 +194,8 @@ impl ImageCache {
         self.images.clear();
         self.texture_ids.clear();
         self.failed.clear();
+        // 后台线程仍持有 slot Arc，完成后自然丢弃
+        self.pending.clear();
     }
 
     /// 当前缓存条目数（测试用）。
