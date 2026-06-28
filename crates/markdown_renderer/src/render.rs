@@ -209,8 +209,9 @@ fn render_inlines(
 
 /// 渲染图片 block：从缓存加载并自动缩放适配宽度。
 ///
-/// 纹理 ID 仅首次创建时通过 `load_texture` 注册到 egui，
-/// 后续帧直接使用缓存的 ID 避免每帧重传像素数据导致的闪烁。
+/// 纹理句柄仅首次创建时通过 `load_texture` 注册到 egui，
+/// 后续帧直接使用缓存的句柄避免每帧重传像素数据导致的闪烁。
+/// **必须存储 `TextureHandle` 而非 `TextureId`**：handle 的 Drop 会释放纹理。
 fn render_image_block(
     ui: &mut egui::Ui,
     alt: &str,
@@ -232,7 +233,8 @@ fn render_image_block(
 
     let texture_size = egui::vec2(color_image.size[0] as f32, color_image.size[1] as f32);
 
-    // 优先使用缓存的纹理 ID，避免每帧 load_texture 触发 GPU 重上传（闪烁）
+    // 优先使用缓存的纹理句柄，避免每帧 load_texture 触发 GPU 重上传（闪烁）
+    // 注意：必须存储 TextureHandle 而非 TextureId，handle 的 Drop 会释放纹理
     let texture_id = if let Some(id) = image_cache.get_texture_id(url) {
         id
     } else {
@@ -242,7 +244,7 @@ fn render_image_block(
             ui.ctx()
                 .load_texture(texture_name, image_data, egui::TextureOptions::default());
         let id = handle.id();
-        image_cache.register_texture_id(url, id);
+        image_cache.register_texture_handle(url, handle);
         id
     };
 

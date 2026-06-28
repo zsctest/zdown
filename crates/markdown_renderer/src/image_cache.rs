@@ -22,15 +22,19 @@ type PendingSlot = Arc<Mutex<Option<Result<egui::ColorImage, String>>>>;
 /// 图片缓存。key 为 URL，value 为已加载的 egui 图片数据。
 /// 失败 URL 记录在 `failed` 集合中，避免重复重试。
 ///
-/// 同时缓存 `TextureId`，避免每帧调用 `load_texture` 触发
+/// 同时缓存 `TextureHandle`，避免每帧调用 `load_texture` 触发
 /// egui 0.34 的纹理替换导致图片闪烁。
+///
+/// **重要**：必须存储 `TextureHandle` 而非 `TextureId`。
+/// `TextureHandle::Drop` 会调用 `TextureManager::free(id)` 释放纹理；
+/// 只有持有 handle 才能保持纹理存活。
 ///
 /// 远程图片通过后台线程加载，`poll_pending` 负责收尾。
 pub struct ImageCache {
     images: VecDeque<(String, Arc<egui::ColorImage>)>,
-    /// 缓存已注册的纹理 ID（key 为 URL），
-    /// 避免每帧 `load_texture` 重新上传相同像素数据。
-    texture_ids: HashMap<String, egui::TextureId>,
+    /// 缓存已注册的纹理句柄（key 为 URL）。
+    /// 持有 handle 可防止纹理被 egui 释放。
+    texture_handles: HashMap<String, egui::TextureHandle>,
     failed: HashSet<String>,
     max_entries: usize,
     /// 正在通过后台线程加载的远程图片。
@@ -41,7 +45,7 @@ impl Default for ImageCache {
     fn default() -> Self {
         Self {
             images: VecDeque::new(),
-            texture_ids: HashMap::new(),
+            texture_handles: HashMap::new(),
             failed: HashSet::new(),
             max_entries: 20,
             pending: HashMap::new(),
@@ -60,7 +64,7 @@ impl ImageCache {
     pub fn with_max(max_entries: usize) -> Self {
         Self {
             images: VecDeque::new(),
-            texture_ids: HashMap::new(),
+            texture_handles: HashMap::new(),
             failed: HashSet::new(),
             max_entries,
             pending: HashMap::new(),
@@ -117,7 +121,7 @@ impl ImageCache {
                 while self.images.len() >= self.max_entries {
                     if let Some((old_key, _)) = self.images.pop_back() {
                         self.failed.remove(&old_key);
-                        self.texture_ids.remove(&old_key);
+                        self.texture_handles.remove(&old_key);
                     }
                 }
                 self.images.push_front((url.to_owned(), Arc::clone(&arc)));
@@ -162,7 +166,7 @@ impl ImageCache {
                     while self.images.len() >= self.max_entries {
                         if let Some((old_key, _)) = self.images.pop_back() {
                             self.failed.remove(&old_key);
-                            self.texture_ids.remove(&old_key);
+                            self.texture_handles.remove(&old_key);
                         }
                     }
                     self.images.push_front((url.clone(), Arc::clone(&arc)));
@@ -179,20 +183,25 @@ impl ImageCache {
 
     /// 获取缓存的纹理 ID（存在则返回 `Some`，否则 `None`）。
     ///
-    /// 纹理 ID 仅在首次 `load_texture` 成功后由渲染层注册。
+    /// ID 从存储的 `TextureHandle` 派生，handle 本身保持在缓存中
+    /// 以阻止 egui 释放纹理。
     pub fn get_texture_id(&self, url: &str) -> Option<egui::TextureId> {
-        self.texture_ids.get(url).copied()
+        self.texture_handles.get(url).map(|h| h.id())
     }
 
-    /// 注册纹理 ID（首次 `load_texture` 成功后由渲染层调用）。
-    pub fn register_texture_id(&mut self, url: &str, id: egui::TextureId) {
-        self.texture_ids.insert(url.to_owned(), id);
+    /// 存储纹理句柄以保持纹理存活。
+    ///
+    /// **必须存储 `TextureHandle` 而非 `TextureId`**：
+    /// `TextureHandle::Drop` 会释放纹理，只存储 ID 会导致
+    /// 下一帧纹理丢失。
+    pub fn register_texture_handle(&mut self, url: &str, handle: egui::TextureHandle) {
+        self.texture_handles.insert(url.to_owned(), handle);
     }
 
     /// 清空缓存（切换文档时调用，避免旧文档的图片占用内存）。
     pub fn clear(&mut self) {
         self.images.clear();
-        self.texture_ids.clear();
+        self.texture_handles.clear();
         self.failed.clear();
         // 后台线程仍持有 slot Arc，完成后自然丢弃
         self.pending.clear();
