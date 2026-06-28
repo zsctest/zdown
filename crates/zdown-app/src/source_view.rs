@@ -7,6 +7,9 @@
 //! - 事件转 editor_engine::Command（Insert/Delete）推入历史
 //! - ui.painter 绘制光标矩形（精确像素定位）
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use eframe::egui;
 use markdown_renderer::SourceHighlighter;
 use spellcheck::SpellError;
@@ -14,6 +17,63 @@ use spellcheck::SpellError;
 use crate::editor_state::EditorState;
 use crate::search_state::SearchState;
 use editor_engine::Cursor;
+
+// ---------------------------------------------------------------------------
+// 高亮缓存：避免每帧 syntect 重解析整个文档
+// ---------------------------------------------------------------------------
+
+/// 缓存的高亮行：预计算的 (颜色, 字符串) 对。
+type CachedLine = Vec<(egui::Color32, String)>;
+
+thread_local! {
+    static HIGHLIGHT_CACHE: RefCell<HashMap<u64, Vec<CachedLine>>> =
+        RefCell::new(HashMap::new());
+}
+
+fn hash_src(src: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    src.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// 获取缓存的高亮行（缓存命中直接返回，否则调用 syntect 并缓存）。
+fn get_cached_highlights(src: &str, highlighter: &SourceHighlighter) -> Vec<CachedLine> {
+    let hash = hash_src(src);
+    HIGHLIGHT_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some(cached) = cache.get(&hash) {
+            return cached.clone();
+        }
+        // 缓存未命中：运行 syntect 高亮
+        let lines: Vec<CachedLine> = highlighter
+            .highlight(src, None)
+            .into_iter()
+            .map(|line| {
+                line.into_iter()
+                    .map(|(style, text)| {
+                        let color = egui::Color32::from_rgb(
+                            style.foreground.r,
+                            style.foreground.g,
+                            style.foreground.b,
+                        );
+                        (color, text.to_owned())
+                    })
+                    .collect()
+            })
+            .collect();
+        // 限制缓存大小（文档编辑时旧 hash 无意义）
+        if cache.len() > 10 {
+            cache.clear();
+        }
+        cache.insert(hash, lines.clone());
+        lines
+    })
+}
+
+// ---------------------------------------------------------------------------
+// 公开入口
+// ---------------------------------------------------------------------------
 
 /// 渲染源码编辑视图。
 pub fn show_source_view(
@@ -62,17 +122,23 @@ pub fn show_source_view(
         ctx.memory_mut(|m| m.request_focus(focus_id));
     }
 
+    let cursor_line = state.editor().cursor.line;
+    let needs_scroll = state.needs_scroll_cursor;
+
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.horizontal(|ui| {
             // 行号列
             let line_count = src.lines().count().max(1);
             ui.vertical(|ui| {
                 for i in 0..line_count {
-                    ui.label(
+                    let resp = ui.label(
                         egui::RichText::new(format!("{:>3}", i + 1))
                             .monospace()
                             .weak(),
                     );
+                    if needs_scroll && i == cursor_line {
+                        resp.scroll_to_me(Some(egui::Align::Center));
+                    }
                 }
             });
 
@@ -91,6 +157,10 @@ pub fn show_source_view(
             });
         });
     });
+
+    if needs_scroll {
+        state.needs_scroll_cursor = false;
+    }
 }
 
 /// 查找指定行中所有拼写错误的列范围。
@@ -159,7 +229,7 @@ fn paint_squiggly_underline(
     }
 }
 
-/// 渲染高亮文本 + 光标矩形。
+/// 渲染高亮文本 + 光标矩形（含高亮缓存，避免每帧 syntect 重解析）。
 fn render_text_with_cursor(
     ui: &mut egui::Ui,
     src: &str,
@@ -194,8 +264,9 @@ fn render_text_with_cursor(
     }
 
     if let Some(h) = highlighter {
-        let lines = h.highlight(src, None);
-        for (line_idx, line) in lines.iter().enumerate() {
+        // 使用缓存避免每帧 syntect 重解析（主要性能瓶颈）
+        let cached_lines = get_cached_highlights(src, h);
+        for (line_idx, line) in cached_lines.iter().enumerate() {
             let match_ranges = line_match_ranges(search, line_idx);
             let (rect, _) = ui.allocate_at_least(
                 egui::vec2(ui.available_width(), row_height),
@@ -238,19 +309,14 @@ fn render_text_with_cursor(
                 );
             }
 
-            // 绘制高亮文本
+            // 绘制高亮文本（颜色已预计算，跳过 syntect）
             let mut x = rect.min.x;
-            for (style, text) in line {
-                let color = egui::Color32::from_rgb(
-                    style.foreground.r,
-                    style.foreground.g,
-                    style.foreground.b,
-                );
+            for (color, text) in line {
                 let galley = ui
                     .ctx()
-                    .fonts_mut(|f| f.layout_no_wrap((*text).to_string(), font_id.clone(), color));
+                    .fonts_mut(|f| f.layout_no_wrap(text.clone(), font_id.clone(), *color));
                 ui.painter()
-                    .galley(egui::pos2(x, rect.min.y), galley.clone(), color);
+                    .galley(egui::pos2(x, rect.min.y), galley.clone(), *color);
                 x += galley.size().x;
             }
 
@@ -262,9 +328,9 @@ fn render_text_with_cursor(
                     .flat_map(|(_, t)| t.chars())
                     .take(cursor.col)
                     .collect();
-                let prefix_galley = ui.ctx().fonts_mut(|f| {
-                    f.layout_no_wrap(prefix.clone(), font_id.clone(), egui::Color32::WHITE)
-                });
+                let prefix_galley = ui
+                    .ctx()
+                    .fonts_mut(|f| f.layout_no_wrap(prefix, font_id.clone(), egui::Color32::WHITE));
                 let cursor_x = rect.min.x + prefix_galley.size().x;
                 let cursor_rect = egui::Rect::from_min_size(
                     egui::pos2(cursor_x, rect.min.y),

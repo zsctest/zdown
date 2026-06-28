@@ -44,7 +44,10 @@ fn main() -> eframe::Result {
     }
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title("zdown"),
+        viewport: egui::ViewportBuilder::default()
+            .with_title("zdown")
+            .with_inner_size([1200.0, 800.0]),
+        centered: true,
         ..Default::default()
     };
 
@@ -146,6 +149,8 @@ struct ZdownApp {
     highlighter: Option<markdown_renderer::SourceHighlighter>,
     /// 渲染缓存（LRU 10 条）。
     render_cache: markdown_renderer::RenderCache,
+    /// 图片加载缓存（避免逐帧重复下载）。
+    image_cache: markdown_renderer::ImageCache,
     /// 大纲面板折叠状态。
     fold_state: outline_view::OutlineFoldState,
     /// 大纲面板拖拽排序状态。
@@ -196,6 +201,7 @@ impl Default for ZdownApp {
                     .ok()
             },
             render_cache: markdown_renderer::RenderCache::new(),
+            image_cache: markdown_renderer::ImageCache::new(),
             fold_state: outline_view::OutlineFoldState::default(),
             outline_drag: outline_view::OutlineDragState::default(),
             outline_filter: outline_view::OutlineFilterState::default(),
@@ -248,24 +254,6 @@ impl eframe::App for ZdownApp {
             }
         });
 
-        // 主题切换时重建 highlighter + 保存配置
-        if self.theme != theme_before {
-            let syntax_name = match self.theme {
-                ThemeMode::Dark => "base16-ocean.dark",
-                ThemeMode::Light => "InspiredGitHub",
-            };
-            self.highlighter = markdown_renderer::SourceHighlighter::with_theme(syntax_name)
-                .or_else(|_| {
-                    tracing::warn!("语法主题加载失败: {syntax_name}，使用默认");
-                    markdown_renderer::SourceHighlighter::new()
-                })
-                .ok();
-
-            self.app_config.theme = self.theme.clone();
-            if let Err(e) = self.app_config.save() {
-                tracing::error!("配置保存失败: {e}");
-            }
-        }
         menu::handle_shortcuts(
             &ctx,
             &mut self.state,
@@ -274,6 +262,42 @@ impl eframe::App for ZdownApp {
             &mut self.theme,
             &self.app_config,
         );
+
+        // 主题切换时重建 highlighter + 保存配置
+        // 注：此检查放在 show_menu 和 handle_shortcuts 之后，
+        // 确保无论通过菜单还是快捷键切换主题都能正确更新高亮。
+        if self.theme != theme_before {
+            let syntax_name = match self.theme {
+                ThemeMode::Dark => "base16-ocean.dark",
+                ThemeMode::Light => "InspiredGitHub",
+            };
+            // 优先使用 set_theme 动态切换，避免重建 SyntaxSet
+            let switched = self
+                .highlighter
+                .as_mut()
+                .map(|h| h.set_theme(syntax_name))
+                .transpose();
+            match switched {
+                Ok(Some(())) => {
+                    tracing::debug!("语法主题已切换: {syntax_name}");
+                }
+                Ok(None) | Err(_) => {
+                    tracing::warn!("语法主题动态切换失败，重建高亮器: {syntax_name}");
+                    self.highlighter =
+                        markdown_renderer::SourceHighlighter::with_theme(syntax_name)
+                            .or_else(|_| {
+                                tracing::warn!("语法主题加载失败，使用默认");
+                                markdown_renderer::SourceHighlighter::new()
+                            })
+                            .ok();
+                }
+            }
+
+            self.app_config.theme = self.theme.clone();
+            if let Err(e) = self.app_config.save() {
+                tracing::error!("配置保存失败: {e}");
+            }
+        }
 
         // 搜索快捷键：Esc 关闭、Enter 导航（需在编辑器输入处理之前）
         if self.search.visible {
@@ -286,6 +310,7 @@ impl eframe::App for ZdownApp {
                         .state
                         .editor_mut()
                         .set_cursor(Cursor::new(m.line, m.col_start));
+                    self.state.needs_scroll_cursor = true;
                 }
             }
         }
@@ -359,13 +384,17 @@ impl eframe::App for ZdownApp {
             .show_inside(ui, |ui| {
                 let available = ui.available_height();
                 let handle_height = 6.0;
-                let min_top = 60.0;
+                let min_top = 100.0;
                 let min_bottom = 40.0;
                 let split = self.side_split_ratio.clamp(0.1, 0.9);
 
-                let top_h = ((available - handle_height) * split)
+                let max_h = available - handle_height;
+                // 按比例分割，但确保两个面板都有合理的最小空间。
+                // (max_h - min_bottom).max(min_top) 保证即使在空间紧张时
+                // 大纲面板也不会被压缩到 min_top 以下。
+                let top_h = (max_h * split)
                     .max(min_top)
-                    .min(available - handle_height - min_bottom);
+                    .min((max_h - min_bottom).max(min_top.min(max_h)));
 
                 // 上半部：大纲面板
                 let top_rect = ui.available_rect_before_wrap();
@@ -435,6 +464,7 @@ impl eframe::App for ZdownApp {
                         &mut self.file_tree,
                         &mut self.state,
                         &self.i18n,
+                        &mut self.image_cache,
                     );
                 });
             });
@@ -475,6 +505,7 @@ impl eframe::App for ZdownApp {
                                         .state
                                         .editor_mut()
                                         .set_cursor(Cursor::new(m.line, m.col_start));
+                                    self.state.needs_scroll_cursor = true;
                                 }
                             }
 
@@ -529,6 +560,7 @@ impl eframe::App for ZdownApp {
                                         .state
                                         .editor_mut()
                                         .set_cursor(Cursor::new(m.line, m.col_start));
+                                    self.state.needs_scroll_cursor = true;
                                 }
                             }
                             if ui
@@ -540,6 +572,7 @@ impl eframe::App for ZdownApp {
                                         .state
                                         .editor_mut()
                                         .set_cursor(Cursor::new(m.line, m.col_start));
+                                    self.state.needs_scroll_cursor = true;
                                 }
                             }
 
@@ -648,6 +681,7 @@ impl eframe::App for ZdownApp {
                         ui,
                         &mut self.state,
                         &mut self.render_cache,
+                        &mut self.image_cache,
                         &self.app_config.image_hosting,
                     );
                 }
@@ -657,6 +691,7 @@ impl eframe::App for ZdownApp {
                         &mut self.state,
                         highlighter,
                         &mut self.render_cache,
+                        &mut self.image_cache,
                         &self.app_config.image_hosting,
                     );
                 }

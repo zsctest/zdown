@@ -8,22 +8,44 @@ use document_model::ast::{
     TableCell,
 };
 
+use std::path::Path;
+use std::sync::Arc;
+
+use crate::image_cache::ImageCache;
 use crate::source::SourceHighlighter;
 
 /// 将 `Document` 渲染到 egui UI。
-pub fn render(ui: &mut egui::Ui, doc: &Document) {
+pub fn render(
+    ui: &mut egui::Ui,
+    doc: &Document,
+    image_cache: &mut ImageCache,
+    working_dir: Option<&Path>,
+) {
     for bws in &doc.blocks {
-        render_block(ui, &bws.block);
+        render_block(ui, &bws.block, image_cache, working_dir);
     }
 }
 
-fn render_block(ui: &mut egui::Ui, block: &Block) {
+fn render_block(
+    ui: &mut egui::Ui,
+    block: &Block,
+    image_cache: &mut ImageCache,
+    working_dir: Option<&Path>,
+) {
     match block {
-        Block::Heading(h) => render_heading(ui, h),
-        Block::Paragraph(p) => render_paragraph(ui, p),
+        Block::Heading(h) => render_heading(ui, h, image_cache, working_dir),
+        Block::Paragraph(p) => render_paragraph(ui, p, image_cache, working_dir),
         Block::CodeBlock(cb) => render_code_block(ui, cb),
-        Block::List(l) => render_list(ui, l.ordered, l.start, &l.items, 0),
-        Block::BlockQuote(bq) => render_blockquote(ui, bq),
+        Block::List(l) => render_list(
+            ui,
+            l.ordered,
+            l.start,
+            &l.items,
+            0,
+            image_cache,
+            working_dir,
+        ),
+        Block::BlockQuote(bq) => render_blockquote(ui, bq, image_cache, working_dir),
         Block::ThematicBreak => {
             ui.separator();
         }
@@ -34,10 +56,15 @@ fn render_block(ui: &mut egui::Ui, block: &Block) {
     }
 }
 
-fn render_heading(ui: &mut egui::Ui, h: &Heading) {
+fn render_heading(
+    ui: &mut egui::Ui,
+    h: &Heading,
+    image_cache: &mut ImageCache,
+    working_dir: Option<&Path>,
+) {
     let font_id = heading_font_id(ui, h.level);
     ui.horizontal_wrapped(|ui| {
-        render_inlines(ui, &h.inlines, &font_id);
+        render_inlines(ui, &h.inlines, &font_id, image_cache, working_dir);
     });
 }
 
@@ -59,20 +86,82 @@ fn heading_font_id(ui: &egui::Ui, level: u8) -> egui::FontId {
     }
 }
 
-fn render_paragraph(ui: &mut egui::Ui, p: &Paragraph) {
+fn render_paragraph(
+    ui: &mut egui::Ui,
+    p: &Paragraph,
+    image_cache: &mut ImageCache,
+    working_dir: Option<&Path>,
+) {
     let font_id = ui
         .style()
         .text_styles
         .get(&egui::TextStyle::Body)
         .cloned()
         .unwrap_or_else(egui::FontId::default);
-    ui.horizontal_wrapped(|ui| {
-        render_inlines(ui, &p.inlines, &font_id);
+
+    // 按 Image 边界切分：文本段走 horizontal_wrapped，图片段独立全宽渲染
+    let segments = split_inlines_by_image(&p.inlines);
+    ui.vertical(|ui| {
+        for seg in &segments {
+            match seg {
+                InlineSegment::Text(inlines) => {
+                    if !inlines.is_empty() {
+                        ui.horizontal_wrapped(|ui| {
+                            render_inlines(ui, inlines, &font_id, image_cache, working_dir);
+                        });
+                    }
+                }
+                InlineSegment::Image { alt, url, .. } => {
+                    render_image_block(ui, alt, url, image_cache, working_dir);
+                }
+            }
+        }
     });
 }
 
+/// 按 `Inline::Image` 边界切分 inlines 为文本/图片段。
+#[derive(Debug, Clone)]
+enum InlineSegment {
+    Text(Vec<Inline>),
+    Image { alt: String, url: String },
+}
+
+fn split_inlines_by_image(inlines: &[Inline]) -> Vec<InlineSegment> {
+    let mut segments: Vec<InlineSegment> = Vec::new();
+    let mut current_text: Vec<Inline> = Vec::new();
+
+    for inline in inlines {
+        match inline {
+            Inline::Image { alt, url, .. } => {
+                if !current_text.is_empty() {
+                    segments.push(InlineSegment::Text(std::mem::take(&mut current_text)));
+                }
+                segments.push(InlineSegment::Image {
+                    alt: alt.clone(),
+                    url: url.clone(),
+                });
+            }
+            other => {
+                current_text.push(other.clone());
+            }
+        }
+    }
+
+    if !current_text.is_empty() {
+        segments.push(InlineSegment::Text(current_text));
+    }
+
+    segments
+}
+
 /// 逐 inline 渲染片段，支持 emph/strong/code/link/image 样式。
-fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline], font_id: &egui::FontId) {
+fn render_inlines(
+    ui: &mut egui::Ui,
+    inlines: &[Inline],
+    font_id: &egui::FontId,
+    image_cache: &mut ImageCache,
+    working_dir: Option<&Path>,
+) {
     for inline in inlines {
         match inline {
             Inline::Text(s) => {
@@ -102,9 +191,7 @@ fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline], font_id: &egui::FontId)
                 );
             }
             Inline::Image { alt, url, .. } => {
-                ui.label(
-                    egui::RichText::new(format!("[图片: {alt}]({url})")).font(font_id.clone()),
-                );
+                render_image_block(ui, alt, url, image_cache, working_dir);
             }
             Inline::Html(s) => {
                 html_renderer::render_inline_html(ui, s, font_id);
@@ -119,15 +206,84 @@ fn render_inlines(ui: &mut egui::Ui, inlines: &[Inline], font_id: &egui::FontId)
     }
 }
 
+/// 渲染图片 block：从缓存加载并自动缩放适配宽度。
+///
+/// 纹理 ID 仅首次创建时通过 `load_texture` 注册到 egui，
+/// 后续帧直接使用缓存的 ID 避免每帧重传像素数据导致的闪烁。
+fn render_image_block(
+    ui: &mut egui::Ui,
+    alt: &str,
+    url: &str,
+    image_cache: &mut ImageCache,
+    working_dir: Option<&Path>,
+) {
+    let Some(color_image) = image_cache.get_or_load(url, working_dir) else {
+        // 加载失败，显示占位文本
+        let font_id = ui
+            .style()
+            .text_styles
+            .get(&egui::TextStyle::Body)
+            .cloned()
+            .unwrap_or_else(egui::FontId::default);
+        ui.label(egui::RichText::new(format!("[图片: {alt}]")).font(font_id));
+        return;
+    };
+
+    let texture_size = egui::vec2(color_image.size[0] as f32, color_image.size[1] as f32);
+
+    // 优先使用缓存的纹理 ID，避免每帧 load_texture 触发 GPU 重上传（闪烁）
+    let texture_id = if let Some(id) = image_cache.get_texture_id(url) {
+        id
+    } else {
+        let image_data = egui::ImageData::Color(Arc::clone(&color_image));
+        let texture_name = format!("img_{:016x}", hash_src(url));
+        let handle =
+            ui.ctx()
+                .load_texture(texture_name, image_data, egui::TextureOptions::default());
+        let id = handle.id();
+        image_cache.register_texture_id(url, id);
+        id
+    };
+
+    let available = ui.available_width().min(texture_size.x);
+    let scale = if texture_size.x > 0.0 {
+        (available / texture_size.x).min(1.0)
+    } else {
+        1.0
+    };
+    let display_size = egui::vec2(
+        (texture_size.x * scale).max(1.0),
+        (texture_size.y * scale).max(1.0),
+    );
+    ui.add_sized(
+        display_size,
+        egui::Image::from_texture((texture_id, texture_size)),
+    );
+}
+
 fn render_code_block(ui: &mut egui::Ui, cb: &CodeBlock) {
     // 检测 Mermaid 图表并渲染为 SVG
     if mermaid_renderer::MermaidRenderer::is_mermaid(cb.language.as_deref()) {
         if let Some(image_data) = render_mermaid_to_egui_image(&cb.content) {
-            let name = format!("mermaid_{:016x}", hash_src(&cb.content));
-            let handle = ui
-                .ctx()
-                .load_texture(name, image_data, egui::TextureOptions::default());
-            let texture_size = handle.size_vec2();
+            let content_hash = hash_src(&cb.content);
+            // 从 image_data 提取尺寸（在 move 之前）
+            let texture_size = match &image_data {
+                egui::ImageData::Color(img) => egui::vec2(img.size[0] as f32, img.size[1] as f32),
+            };
+            // 优先使用缓存的纹理 ID，避免每帧 load_texture 触发 GPU 重上传
+            let texture_id = MERMAID_TEXTURE_IDS.with(|cache| {
+                if let Some(&id) = cache.borrow().get(&content_hash) {
+                    id
+                } else {
+                    let name = format!("mermaid_{:016x}", content_hash);
+                    let handle =
+                        ui.ctx()
+                            .load_texture(name, image_data, egui::TextureOptions::default());
+                    let id = handle.id();
+                    cache.borrow_mut().insert(content_hash, id);
+                    id
+                }
+            });
             let available = ui.available_width().min(texture_size.x);
             let scale = if texture_size.x > 0.0 {
                 available / texture_size.x
@@ -137,7 +293,7 @@ fn render_code_block(ui: &mut egui::Ui, cb: &CodeBlock) {
             let display_size = egui::vec2(available, texture_size.y * scale);
             ui.add_sized(
                 display_size,
-                egui::Image::from_texture((handle.id(), texture_size)),
+                egui::Image::from_texture((texture_id, texture_size)),
             );
             return;
         }
@@ -175,7 +331,16 @@ fn render_code_block(ui: &mut egui::Ui, cb: &CodeBlock) {
 }
 
 /// 渲染列表。签名传 `&[ListItem]` 引用避免递归 clone（参考阶段 1 serialize.rs 修复）。
-fn render_list(ui: &mut egui::Ui, ordered: bool, start: usize, items: &[ListItem], indent: usize) {
+#[allow(clippy::only_used_in_recursion)]
+fn render_list(
+    ui: &mut egui::Ui,
+    ordered: bool,
+    start: usize,
+    items: &[ListItem],
+    indent: usize,
+    image_cache: &mut ImageCache,
+    working_dir: Option<&Path>,
+) {
     ui.vertical(|ui| {
         for (i, item) in items.iter().enumerate() {
             let marker = if ordered {
@@ -191,20 +356,33 @@ fn render_list(ui: &mut egui::Ui, ordered: bool, start: usize, items: &[ListItem
                 ui.indent(egui::Id::new(format!("list_{indent}_{i}")), |ui| {
                     // 递归传 &item.sub_items（非父 List），避免无限递归
                     // 子列表序号从 1 开始，不应继承父级 start
-                    render_list(ui, ordered, 1, &item.sub_items, indent + 1);
+                    render_list(
+                        ui,
+                        ordered,
+                        1,
+                        &item.sub_items,
+                        indent + 1,
+                        image_cache,
+                        working_dir,
+                    );
                 });
             }
         }
     });
 }
 
-fn render_blockquote(ui: &mut egui::Ui, bq: &BlockQuote) {
+fn render_blockquote(
+    ui: &mut egui::Ui,
+    bq: &BlockQuote,
+    image_cache: &mut ImageCache,
+    working_dir: Option<&Path>,
+) {
     egui::Frame::group(ui.style())
         .stroke(egui::Stroke::new(2.0, egui::Color32::LIGHT_BLUE))
         .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
             for bws in &bq.blocks {
-                render_block(ui, &bws.block);
+                render_block(ui, &bws.block, image_cache, working_dir);
             }
         });
 }
@@ -382,6 +560,9 @@ use std::cell::RefCell;
 thread_local! {
     static MERMAID_RENDERER: RefCell<mermaid_renderer::MermaidRenderer> =
         RefCell::new(mermaid_renderer::MermaidRenderer::new());
+    /// Mermaid 纹理 ID 缓存，避免每帧 `load_texture` 重上传（与 ImageCache 同理）。
+    static MERMAID_TEXTURE_IDS: RefCell<std::collections::HashMap<u64, egui::TextureId>> =
+        RefCell::new(std::collections::HashMap::new());
 }
 
 /// 将 Mermaid 源码渲染为 egui ImageData。

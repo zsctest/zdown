@@ -2621,14 +2621,18 @@ checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 name = "markdown_renderer"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "document_model",
  "egui",
  "html_renderer",
+ "image 0.23.14",
  "mermaid_renderer",
  "resvg",
  "syntect",
  "thiserror 2.0.18",
  "tiny-skia",
+ "tracing",
+ "ureq",
 ]
 
 [[package]]

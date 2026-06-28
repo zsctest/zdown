@@ -1,10 +1,12 @@
 //! markdown_renderer：AST → egui 组件渲染（阶段 2）+ 源码高亮（阶段 1）。
 
 pub mod error;
+pub mod image_cache;
 pub mod render;
 pub mod source;
 
 pub use error::Error;
+pub use image_cache::ImageCache;
 pub use render::{RenderCache, render};
 pub use source::{SourceHighlighter, StyledLine};
 

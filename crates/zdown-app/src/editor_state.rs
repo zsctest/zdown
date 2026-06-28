@@ -48,6 +48,8 @@ pub struct EditorState {
     pub spell_errors: Vec<SpellError>,
     /// 标记编辑器视图应在下一帧请求焦点（new/open/切换标签页后）。
     pub needs_focus: bool,
+    /// 标记编辑器视图应滚动到当前光标位置（大纲/搜索导航后）。
+    pub needs_scroll_cursor: bool,
 }
 
 /// open / save 等操作的结果。
@@ -238,6 +240,7 @@ impl EditorState {
             spell_checker,
             spell_errors: Vec::new(),
             needs_focus: true,
+            needs_scroll_cursor: false,
         }
     }
 
@@ -246,6 +249,7 @@ impl EditorState {
         self.tabs.push(DocumentTab::empty());
         self.active_tab = self.tabs.len() - 1;
         self.needs_focus = true;
+        self.spell_errors.clear();
     }
 
     /// 打开指定路径。
@@ -271,6 +275,8 @@ impl EditorState {
         }
 
         self.needs_focus = true;
+        // 清除旧文档的拼写错误，避免旧 byte span 作用于新文档产生误报红色下划线
+        self.spell_errors.clear();
         self.recent.add(path.to_path_buf());
         let _ = self.recent.save();
         Ok(())

@@ -2,8 +2,10 @@
 //!
 //! 用 BlockWithSpan 的 span 查找光标所在 block，避免按行切割破坏多行结构。
 
+use std::path::Path;
+
 use eframe::egui;
-use markdown_renderer::SourceHighlighter;
+use markdown_renderer::{ImageCache, SourceHighlighter};
 
 use crate::editor_state::EditorState;
 
@@ -13,6 +15,7 @@ pub fn show_hybrid_view(
     state: &mut EditorState,
     highlighter: Option<&SourceHighlighter>,
     cache: &mut markdown_renderer::RenderCache,
+    image_cache: &mut ImageCache,
     app_config: &config::ImageHostingConfig,
 ) {
     let working_dir = state
@@ -25,8 +28,11 @@ pub fn show_hybrid_view(
         working_dir.clone(),
     );
 
+    let wd: Option<&Path> = working_dir.as_deref();
+
     let src = state.editor().to_string();
     let cursor_line = state.editor().cursor.line;
+    let needs_scroll = state.needs_scroll_cursor;
     // 先处理输入（复用 source_view 的 prev_cursor/next_cursor + 同样的键处理逻辑）
     let ctx = ui.ctx().clone();
     let focus_id = egui::Id::new(("hybrid_view_input", state.active_tab_index()));
@@ -67,7 +73,14 @@ pub fn show_hybrid_view(
             Some(idx) => {
                 // 光标 block 之前的 block：全渲染
                 for bws in &doc.blocks[..idx] {
-                    render_single_block(ui, &bws.block);
+                    render_single_block(ui, &bws.block, image_cache, wd);
+                }
+
+                // 滚动到光标 block
+                if needs_scroll {
+                    // 使用零高度标签作为滚动锚点
+                    let anchor = ui.label("");
+                    anchor.scroll_to_me(Some(egui::Align::Center));
                 }
 
                 // 光标 block：源码高亮 + 光标
@@ -85,19 +98,28 @@ pub fn show_hybrid_view(
 
                 // 光标 block 之后的 block：全渲染
                 for bws in &doc.blocks[idx + 1..] {
-                    render_single_block(ui, &bws.block);
+                    render_single_block(ui, &bws.block, image_cache, wd);
                 }
             }
             None => {
                 // 光标不在任何 block 内（如空文档末尾），全部渲染
-                markdown_renderer::render(ui, &doc);
+                markdown_renderer::render(ui, &doc, image_cache, wd);
             }
         }
     });
+
+    if needs_scroll {
+        state.needs_scroll_cursor = false;
+    }
 }
 
 /// 渲染单个 Block（用于非光标 block）。
-fn render_single_block(ui: &mut egui::Ui, block: &document_model::ast::Block) {
+fn render_single_block(
+    ui: &mut egui::Ui,
+    block: &document_model::ast::Block,
+    image_cache: &mut ImageCache,
+    working_dir: Option<&Path>,
+) {
     let doc = document_model::Document {
         blocks: vec![document_model::ast::BlockWithSpan {
             block: block.clone(),
@@ -107,7 +129,7 @@ fn render_single_block(ui: &mut egui::Ui, block: &document_model::ast::Block) {
             },
         }],
     };
-    markdown_renderer::render(ui, &doc);
+    markdown_renderer::render(ui, &doc, image_cache, working_dir);
 }
 
 /// 提取指定 span 的源码片段。

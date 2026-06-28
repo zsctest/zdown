@@ -5,6 +5,8 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use markdown_renderer::ImageCache;
+
 use crate::editor_state::EditorState;
 use i18n::I18n;
 
@@ -202,6 +204,7 @@ pub fn show_file_tree_panel(
     state: &mut FileTreeState,
     editor_state: &mut EditorState,
     i18n: &I18n,
+    image_cache: &mut ImageCache,
 ) {
     ui.horizontal(|ui| {
         if let Some(ref root) = state.root_path {
@@ -257,7 +260,7 @@ pub fn show_file_tree_panel(
                 }
                 let resp = render_node(ui, state, i);
                 if resp.clicked() {
-                    handle_node_click(state, i, editor_state);
+                    handle_node_click(state, i, editor_state, image_cache);
                     // 点击后状态已变更（展开/折叠修改了 nodes 数组），
                     // 跳出循环，下一帧用更新后的状态重新渲染。
                     break;
@@ -294,59 +297,66 @@ pub fn show_file_tree_panel(
 fn render_node(ui: &mut egui::Ui, state: &FileTreeState, idx: usize) -> egui::Response {
     let node = &state.nodes[idx];
     let indent = node.depth as f32 * 16.0;
+    let visuals = ui.visuals().clone();
 
-    // 分配整行宽度的交互区域，使用 Sense::click() 确保点击能被检测到
+    // 分配整行宽度的交互区域。
+    // 使用 Sense::CLICK（不含 FOCUSABLE）避免点击后出现焦点红框。
     let row_height = 20.0;
     let (rect, response) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), row_height),
-        egui::Sense::click(),
+        egui::Sense::CLICK,
     );
 
-    // 鼠标悬停时的高亮背景
+    // 鼠标悬停时的高亮背景（使用主题的 hover 颜色）
     if response.hovered() {
         ui.painter()
-            .rect_filled(rect, 0.0, egui::Color32::from_gray(45));
+            .rect_filled(rect, 0.0, visuals.widgets.hovered.bg_fill);
     }
 
-    // 在分配好的区域内渲染内容
-    #[allow(deprecated)]
-    ui.allocate_ui_at_rect(rect, |ui| {
-        ui.horizontal(|ui| {
-            ui.add_space(indent);
+    // 直接用 painter 绘制文本内容，避免创建子 widget 拦截点击事件。
+    // 之前用 child_ui + ui.label() 的方案会导致：点击文件名文本时，
+    // label widget 拦截了点击事件，外层 response 收不到 clicked()。
+    let painter = ui.painter().clone();
+    let font_id = egui::FontId::proportional(13.0);
+    let text_color = if FileTreeState::is_markdown(&node.path) {
+        visuals.strong_text_color()
+    } else {
+        visuals.weak_text_color()
+    };
 
-            if node.is_dir {
-                let expanded = state.is_expanded(&node.path);
-                let arrow = if expanded { "\u{25BC}" } else { "\u{25B6}" };
-                ui.add(egui::Label::new(egui::RichText::new(arrow).size(11.0)));
-            } else {
-                ui.add_space(16.0);
-            }
+    let arrow_str = if node.is_dir {
+        let expanded = state.is_expanded(&node.path);
+        if expanded { "\u{25BC}" } else { "\u{25B6}" }
+    } else {
+        ""
+    };
 
-            let icon = if node.is_dir {
-                if state.is_expanded(&node.path) {
-                    "\u{1F4C2}"
-                } else {
-                    "\u{1F4C1}"
-                }
-            } else if FileTreeState::is_markdown(&node.path) {
-                "\u{1F4DD}"
-            } else {
-                "\u{1F4C4}"
-            };
+    let icon = if node.is_dir {
+        if state.is_expanded(&node.path) {
+            "\u{1F4C2}"
+        } else {
+            "\u{1F4C1}"
+        }
+    } else if FileTreeState::is_markdown(&node.path) {
+        "\u{1F4DD}"
+    } else {
+        "\u{1F4C4}"
+    };
 
-            let name_color = if FileTreeState::is_markdown(&node.path) {
-                egui::Color32::WHITE
-            } else {
-                egui::Color32::from_gray(160)
-            };
+    let display_text = if node.is_dir {
+        format!("  {} {icon} {}", arrow_str, node.name)
+    } else {
+        format!("  {icon} {}", node.name)
+    };
 
-            ui.label(
-                egui::RichText::new(format!("{icon} {}", node.name))
-                    .color(name_color)
-                    .size(13.0),
-            );
-        });
-    });
+    let text_pos = rect.left_center() + egui::vec2(indent, 0.0);
+    painter.text(
+        text_pos,
+        egui::Align2::LEFT_CENTER,
+        display_text,
+        font_id,
+        text_color,
+    );
 
     if FileTreeState::is_markdown(&node.path) {
         response
@@ -357,7 +367,12 @@ fn render_node(ui: &mut egui::Ui, state: &FileTreeState, idx: usize) -> egui::Re
     }
 }
 
-fn handle_node_click(state: &mut FileTreeState, idx: usize, editor_state: &mut EditorState) {
+fn handle_node_click(
+    state: &mut FileTreeState,
+    idx: usize,
+    editor_state: &mut EditorState,
+    image_cache: &mut ImageCache,
+) {
     let node = &state.nodes[idx];
     if node.is_dir {
         state.toggle_expand(idx);
@@ -365,7 +380,16 @@ fn handle_node_click(state: &mut FileTreeState, idx: usize, editor_state: &mut E
     }
 
     if FileTreeState::is_markdown(&node.path) {
-        let _ = editor_state.open(&node.path);
+        match editor_state.open(&node.path) {
+            Ok(()) => {
+                // 清除旧文档的图片缓存，避免内存积累
+                image_cache.clear();
+                editor_state.status_message = format!("已打开: {}", node.name);
+            }
+            Err(e) => {
+                editor_state.status_message = format!("打开失败: {e}");
+            }
+        }
     } else {
         editor_state.status_message = "This file type is not supported".to_string();
     }

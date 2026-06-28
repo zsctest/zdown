@@ -77,6 +77,22 @@ impl SourceHighlighter {
     pub fn theme(&self) -> &Theme {
         &self.theme
     }
+
+    /// 动态切换高亮主题，避免重建 SyntaxSet。
+    ///
+    /// 与 [`with_theme`] 不同，此方法仅替换主题对象，
+    /// 不重新加载语法定义（SyntaxSet）。
+    pub fn set_theme(&mut self, theme_name: &str) -> Result<(), LoadingError> {
+        let theme_set = syntect::highlighting::ThemeSet::load_defaults();
+        let theme = theme_set.themes.get(theme_name).cloned().ok_or_else(|| {
+            LoadingError::Io(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("theme not found: {theme_name}"),
+            ))
+        })?;
+        self.theme = theme;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -169,6 +185,31 @@ mod tests {
     #[test]
     fn with_theme_invalid_returns_err() {
         let result = SourceHighlighter::with_theme("nonexistent-theme-xyz");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn set_theme_switches_theme() {
+        let mut h = SourceHighlighter::new().expect("load");
+        // 默认主题是 base16-ocean.dark（暗色），theme.settings.background 应为深色
+        let orig_bg = h.theme.settings.background;
+
+        // 切换到亮色主题
+        h.set_theme("InspiredGitHub").expect("switch to light");
+
+        // 验证主题已切换
+        let new_bg = h.theme.settings.background;
+        // 两个主题的背景色应该不同
+        assert_ne!(orig_bg, new_bg);
+
+        // 切换到暗色主题
+        h.set_theme("base16-eighties.dark").expect("switch to dark");
+    }
+
+    #[test]
+    fn set_theme_invalid_returns_err() {
+        let mut h = SourceHighlighter::new().expect("load");
+        let result = h.set_theme("nonexistent-theme-xyz");
         assert!(result.is_err());
     }
 }

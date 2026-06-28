@@ -389,10 +389,15 @@ pub fn show_outline_panel(
             for (i, item) in items.iter().enumerate() {
                 // 过滤模式下，仅显示匹配项及其祖先（维持树结构上下文）
                 if is_filtering && !matched_set.contains(&i) {
-                    // 检查是否为某个匹配项的祖先（需要在可见性链上）
-                    let is_ancestor_of_match = matched_set
-                        .iter()
-                        .any(|&m| m > i && items[i].level < items[m].level);
+                    // 检查是否为某个匹配项的祖先（需要在可见性链上）。
+                    // 必须验证 i 和 m 之间没有同级或更低级标题打断祖先关系。
+                    let is_ancestor_of_match = matched_set.iter().any(|&m| {
+                        m > i
+                            && items[i].level < items[m].level
+                            && !items[i + 1..m]
+                                .iter()
+                                .any(|item| item.level <= items[i].level)
+                    });
                     if !is_ancestor_of_match {
                         continue;
                     }
@@ -459,6 +464,7 @@ pub fn show_outline_panel(
                     if response.clicked() && drag_state.dragged_index.is_none() {
                         let cursor = Cursor::new(item.line, 0);
                         let _ = state.editor_mut().set_cursor(cursor);
+                        state.needs_scroll_cursor = true;
                     }
 
                     // 拖拽开始检测
@@ -1126,5 +1132,114 @@ mod tests {
         assert_eq!(count, 1);
         // 中文被视为 alphabetic，空格转为连字符
         assert!(toc.contains("(#简介-intro)"), "TOC: {}", toc);
+    }
+
+    // ---- 完整管道测试：EditorState → current_doc() → extract_outline() ----
+
+    /// 测试从 EditorState 到 extract_outline 的完整管道。
+    #[test]
+    fn pipeline_editor_state_to_outline() {
+        let mut state = EditorState::default();
+        let i18n = i18n_zh();
+
+        // 初始状态：空文档 → 空大纲
+        {
+            let doc = state.current_doc();
+            let items = extract_outline(&doc, &i18n);
+            assert!(items.is_empty(), "空编辑器应产生空大纲");
+        }
+
+        // 设置 markdown 内容（含中文标题）
+        let _ = state.apply(editor_engine::Command::ReplaceAll {
+            text: "# 简介\n\n一些文字。\n\n## 安装\n\n安装说明。\n\n### 配置\n\n配置说明。\n"
+                .into(),
+        });
+
+        // 验证大纲提取
+        {
+            let doc = state.current_doc();
+            let items = extract_outline(&doc, &i18n);
+            assert_eq!(items.len(), 3, "应有 3 个标题");
+            assert_eq!(items[0].level, 1);
+            assert_eq!(items[0].text, "简介");
+            assert_eq!(items[0].line, 0);
+            assert_eq!(items[1].level, 2);
+            assert_eq!(items[1].text, "安装");
+            assert_eq!(items[2].level, 3);
+            assert_eq!(items[2].text, "配置");
+        }
+
+        // 修改内容（替换为不同的标题结构）
+        let _ = state.apply(editor_engine::Command::ReplaceAll {
+            text: "# 新标题\n\n内容。\n".into(),
+        });
+
+        // 验证大纲更新
+        {
+            let doc = state.current_doc();
+            let items = extract_outline(&doc, &i18n);
+            assert_eq!(items.len(), 1, "修改后应有 1 个标题");
+            assert_eq!(items[0].text, "新标题");
+        }
+    }
+
+    /// 测试编辑后立即反映到大纲中。
+    #[test]
+    fn pipeline_outline_reflects_edits() {
+        let mut state = EditorState::default();
+        let i18n = i18n_zh();
+
+        // 逐步构建 markdown
+        let _ = state.apply(editor_engine::Command::ReplaceAll {
+            text: "# 标题\n".into(),
+        });
+        {
+            let items = extract_outline(&state.current_doc(), &i18n);
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0].text, "标题");
+        }
+
+        // 添加更多标题
+        let _ = state.apply(editor_engine::Command::ReplaceAll {
+            text: "# 标题\n\n## 子标题\n\n### 嵌套\n\n# 另一个\n".into(),
+        });
+        {
+            let items = extract_outline(&state.current_doc(), &i18n);
+            assert_eq!(items.len(), 4, "应有 4 个标题");
+            assert_eq!(items[1].text, "子标题");
+            assert_eq!(items[2].text, "嵌套");
+            assert_eq!(items[3].text, "另一个");
+        }
+    }
+
+    /// 测试没有标题的 markdown 返回空大纲。
+    #[test]
+    fn pipeline_no_headings_returns_empty() {
+        let mut state = EditorState::default();
+        let i18n = i18n_zh();
+
+        let _ = state.apply(editor_engine::Command::ReplaceAll {
+            text: "这是一段纯文本，没有任何标题。\n\n另一段。\n".into(),
+        });
+
+        let items = extract_outline(&state.current_doc(), &i18n);
+        assert!(items.is_empty(), "无标题文档应返回空大纲");
+    }
+
+    /// 测试英中混合标题。
+    #[test]
+    fn pipeline_mixed_language_headings() {
+        let mut state = EditorState::default();
+        let i18n = i18n_zh();
+
+        let _ = state.apply(editor_engine::Command::ReplaceAll {
+            text: "# Introduction\n\n## 安装 Installation\n\n### 步骤 1: Setup\n".into(),
+        });
+
+        let items = extract_outline(&state.current_doc(), &i18n);
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].text, "Introduction");
+        assert_eq!(items[1].text, "安装 Installation");
+        assert_eq!(items[2].text, "步骤 1: Setup");
     }
 }
