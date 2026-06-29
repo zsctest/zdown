@@ -181,6 +181,15 @@ impl ImageCache {
         ctx.request_repaint();
     }
 
+    /// 查询已缓存图片的原始像素尺寸（不触发加载）。
+    /// ponytail: 仅遍历 images deque，remote 未加载完成返回 None。
+    pub fn get_cached_dimensions(&self, url: &str) -> Option<[usize; 2]> {
+        self.images
+            .iter()
+            .find(|(k, _)| k == url)
+            .map(|(_, img)| img.size)
+    }
+
     /// 获取缓存的纹理 ID（存在则返回 `Some`，否则 `None`）。
     ///
     /// ID 从存储的 `TextureHandle` 派生，handle 本身保持在缓存中
@@ -251,23 +260,20 @@ fn load_from_data_uri(url: &str) -> Result<egui::ColorImage, String> {
 fn load_from_remote(url: &str) -> Result<egui::ColorImage, String> {
     let response = ureq::get(url)
         .set("User-Agent", "zdown/0.1 (markdown-editor)")
-        .set("Accept", "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5")
+        .set(
+            "Accept",
+            "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5",
+        )
         .timeout(Duration::from_secs(10))
         .call()
         .map_err(|e| format!("远程请求失败 [{url}]: {e}"))?;
 
     let status = response.status();
     if status != 200 {
-        return Err(format!(
-            "HTTP {} [{url}] — 非 200 状态码",
-            status
-        ));
+        return Err(format!("HTTP {} [{url}] — 非 200 状态码", status));
     }
 
-    let content_type = response
-        .header("Content-Type")
-        .unwrap_or("")
-        .to_lowercase();
+    let content_type = response.header("Content-Type").unwrap_or("").to_lowercase();
     // 返回的不是图片类型则提前报错，给出清晰信息（常见于反盗链 / CDN 拦截）
     if !content_type.is_empty()
         && !content_type.starts_with("image/")
@@ -288,11 +294,10 @@ fn load_from_remote(url: &str) -> Result<egui::ColorImage, String> {
         return Err(format!("空响应体 [{url}]"));
     }
 
-    let dyn_img = image::load_from_memory(&bytes)
-        .map_err(|e| {
-            let preview = String::from_utf8_lossy(&bytes[..bytes.len().min(100)]);
-            format!("图片解码失败 [{url}]: {e} — 响应前 100 字节: {preview}")
-        })?;
+    let dyn_img = image::load_from_memory(&bytes).map_err(|e| {
+        let preview = String::from_utf8_lossy(&bytes[..bytes.len().min(100)]);
+        format!("图片解码失败 [{url}]: {e} — 响应前 100 字节: {preview}")
+    })?;
     dynamic_to_egui(dyn_img)
 }
 

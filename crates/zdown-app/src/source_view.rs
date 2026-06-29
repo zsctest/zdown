@@ -125,20 +125,33 @@ pub fn show_source_view(
     let cursor_line = state.editor().cursor.line;
     let needs_scroll = state.needs_scroll_cursor;
 
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    let font_id = ui
+        .style()
+        .text_styles
+        .get(&egui::TextStyle::Monospace)
+        .cloned()
+        .unwrap_or_else(|| egui::FontId::monospace(14.0));
+    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
+    let line_count = src.lines().count().max(1);
+
+    // ponytail: virtual scrolling — only layout visible lines
+    let mut scroll_area = egui::ScrollArea::vertical();
+    if needs_scroll {
+        let target_y = cursor_line as f32 * row_height;
+        let visible_h = ui.available_height().max(1.0);
+        scroll_area = scroll_area.vertical_scroll_offset((target_y - visible_h * 0.3).max(0.0));
+        state.needs_scroll_cursor = false;
+    }
+    scroll_area.show_rows(ui, row_height, line_count, |ui, visible_range| {
         ui.horizontal(|ui| {
             // 行号列
-            let line_count = src.lines().count().max(1);
             ui.vertical(|ui| {
-                for i in 0..line_count {
-                    let resp = ui.label(
+                for i in visible_range.clone() {
+                    ui.label(
                         egui::RichText::new(format!("{:>3}", i + 1))
                             .monospace()
                             .weak(),
                     );
-                    if needs_scroll && i == cursor_line {
-                        resp.scroll_to_me(Some(egui::Align::Center));
-                    }
                 }
             });
 
@@ -146,10 +159,13 @@ pub fn show_source_view(
 
             // 高亮文本 + 光标
             ui.vertical(|ui| {
-                render_text_with_cursor(
+                render_visible_lines(
                     ui,
                     &src,
+                    visible_range,
                     state.editor().cursor,
+                    &font_id,
+                    row_height,
                     highlighter,
                     search,
                     &state.spell_errors,
@@ -157,10 +173,6 @@ pub fn show_source_view(
             });
         });
     });
-
-    if needs_scroll {
-        state.needs_scroll_cursor = false;
-    }
 }
 
 /// 查找指定行中所有拼写错误的列范围。
@@ -229,25 +241,20 @@ fn paint_squiggly_underline(
     }
 }
 
-/// 渲染高亮文本 + 光标矩形（含高亮缓存，避免每帧 syntect 重解析）。
-fn render_text_with_cursor(
+/// 只渲染可见行的高亮文本 + 光标。
+/// ponytail: port of render_text_with_cursor filtered to visible_range.
+#[allow(clippy::too_many_arguments)]
+fn render_visible_lines(
     ui: &mut egui::Ui,
     src: &str,
+    visible_range: std::ops::Range<usize>,
     cursor: Cursor,
+    font_id: &egui::FontId,
+    row_height: f32,
     highlighter: Option<&SourceHighlighter>,
     search: &SearchState,
     spell_errors: &[SpellError],
 ) {
-    // 从 egui style 获取等宽字体字号，避免硬编码
-    let font_id = ui
-        .style()
-        .text_styles
-        .get(&egui::TextStyle::Monospace)
-        .cloned()
-        .unwrap_or_else(|| egui::FontId::monospace(14.0));
-    let row_height = ui.text_style_height(&egui::TextStyle::Monospace);
-
-    // 收集当前行的匹配范围（用于高亮绘制）
     fn line_match_ranges(search: &SearchState, line_idx: usize) -> Vec<(usize, usize, bool)> {
         let mut ranges: Vec<(usize, usize, bool)> = Vec::new();
         if !search.visible || search.matches.is_empty() {
@@ -264,16 +271,17 @@ fn render_text_with_cursor(
     }
 
     if let Some(h) = highlighter {
-        // 使用缓存避免每帧 syntect 重解析（主要性能瓶颈）
         let cached_lines = get_cached_highlights(src, h);
-        for (line_idx, line) in cached_lines.iter().enumerate() {
+        for line_idx in visible_range {
+            let Some(line) = cached_lines.get(line_idx) else {
+                continue;
+            };
             let match_ranges = line_match_ranges(search, line_idx);
             let (rect, _) = ui.allocate_at_least(
                 egui::vec2(ui.available_width(), row_height),
                 egui::Sense::hover(),
             );
 
-            // 绘制匹配高亮背景（在文本之前，确保文本在背景之上）
             for &(col_start, col_end, is_current) in &match_ranges {
                 let m_prefix: String = line
                     .iter()
@@ -295,9 +303,9 @@ fn render_text_with_cursor(
                 let bg_x = rect.min.x + m_prefix_galley.size().x;
                 let bg_w = m_text_galley.size().x;
                 let bg_color = if is_current {
-                    egui::Color32::from_rgb(212, 133, 11) // 橙色 #d4850b
+                    egui::Color32::from_rgb(212, 133, 11)
                 } else {
-                    egui::Color32::from_rgb(107, 76, 18) // 暗黄 #6b4c12
+                    egui::Color32::from_rgb(107, 76, 18)
                 };
                 ui.painter().rect_filled(
                     egui::Rect::from_min_size(
@@ -309,7 +317,6 @@ fn render_text_with_cursor(
                 );
             }
 
-            // 绘制高亮文本（颜色已预计算，跳过 syntect）
             let mut x = rect.min.x;
             for (color, text) in line {
                 let galley = ui
@@ -320,9 +327,7 @@ fn render_text_with_cursor(
                 x += galley.size().x;
             }
 
-            // 绘制光标矩形（在光标所在行，在匹配高亮之上）
             if line_idx == cursor.line {
-                // 计算光标 x 位置：光标前所有字符的宽度之和
                 let prefix: String = line
                     .iter()
                     .flat_map(|(_, t)| t.chars())
@@ -340,7 +345,6 @@ fn render_text_with_cursor(
                     .rect_filled(cursor_rect, 0.0, egui::Color32::from_rgb(200, 200, 200));
             }
 
-            // 绘制拼写错误波浪线
             let spell_ranges = find_line_spell_errors(src, spell_errors, line_idx);
             for (col_start, col_end) in spell_ranges {
                 let err_prefix: String = line
@@ -368,20 +372,23 @@ fn render_text_with_cursor(
                     ui.painter(),
                     squiggly_start,
                     squiggly_end,
-                    egui::Color32::from_rgb(224, 108, 117), // 红色 #e06c75
+                    egui::Color32::from_rgb(224, 108, 117),
                 );
             }
         }
     } else {
-        // fallback：不高亮
-        for (line_idx, line) in src.lines().enumerate() {
+        // fallback：不高亮，按行索引取源文本行
+        let all_lines: Vec<&str> = src.lines().collect();
+        for line_idx in visible_range {
+            let Some(line) = all_lines.get(line_idx) else {
+                continue;
+            };
             let match_ranges = line_match_ranges(search, line_idx);
             let (rect, _) = ui.allocate_at_least(
                 egui::vec2(ui.available_width(), row_height),
                 egui::Sense::hover(),
             );
 
-            // 绘制匹配高亮背景（在文本之前，确保文本在背景之上）
             for &(col_start, col_end, is_current) in &match_ranges {
                 let m_prefix: String = line.chars().take(col_start).collect();
                 let m_text: String = line
@@ -413,11 +420,10 @@ fn render_text_with_cursor(
             }
 
             let galley = ui.ctx().fonts_mut(|f| {
-                f.layout_no_wrap(line.to_string(), font_id.clone(), egui::Color32::WHITE)
+                f.layout_no_wrap((*line).to_string(), font_id.clone(), egui::Color32::WHITE)
             });
             ui.painter().galley(rect.min, galley, egui::Color32::WHITE);
 
-            // 绘制光标矩形（在匹配高亮之上）
             if line_idx == cursor.line {
                 let prefix: String = line.chars().take(cursor.col).collect();
                 let prefix_galley = ui
@@ -432,7 +438,6 @@ fn render_text_with_cursor(
                     .rect_filled(cursor_rect, 0.0, egui::Color32::from_rgb(200, 200, 200));
             }
 
-            // 绘制拼写错误波浪线
             let spell_ranges = find_line_spell_errors(src, spell_errors, line_idx);
             for (col_start, col_end) in spell_ranges {
                 let err_prefix: String = line.chars().take(col_start).collect();

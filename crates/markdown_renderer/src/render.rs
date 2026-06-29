@@ -15,6 +15,7 @@ use crate::image_cache::ImageCache;
 use crate::source::SourceHighlighter;
 
 /// 将 `Document` 渲染到 egui UI。
+/// ponytail: 跳过视口外的 block（预估高度 + allocate_space），仅渲染可见 block。
 pub fn render(
     ui: &mut egui::Ui,
     doc: &Document,
@@ -22,8 +23,99 @@ pub fn render(
     working_dir: Option<&Path>,
 ) {
     image_cache.poll_pending(ui.ctx());
+    let clip = ui.clip_rect();
+    let spacing = ui.spacing().item_spacing.y;
+
     for bws in &doc.blocks {
+        let cursor_y = ui.cursor().min.y;
+
+        // 当前 block 完全在视口上方 → 预估高度跳过
+        let est = estimate_block_height(ui, &bws.block, image_cache);
+        if cursor_y + est + spacing < clip.min.y {
+            ui.allocate_space(egui::vec2(ui.available_width(), est));
+            continue;
+        }
+        // 当前 block 已在视口下方 → 终止
+        if cursor_y > clip.max.y + est {
+            break;
+        }
+
         render_block(ui, &bws.block, image_cache, working_dir);
+    }
+}
+
+/// 预估 block 渲染高度（用于视口外跳过）。
+fn estimate_block_height(ui: &egui::Ui, block: &Block, image_cache: &ImageCache) -> f32 {
+    let body_h = ui.text_style_height(&egui::TextStyle::Body);
+    let spacing = ui.spacing().item_spacing.y;
+    let avail_w = ui.available_width().max(100.0);
+
+    match block {
+        Block::Heading(h) => {
+            let scale = match h.level {
+                1 => 2.0,
+                2 => 1.7,
+                3 => 1.4,
+                4 => 1.2,
+                _ => 1.0,
+            };
+            body_h * scale + spacing
+        }
+        Block::Paragraph(p) => {
+            // ponytail: 按 Image 边界分段估算；图片用缓存尺寸/默认占位
+            let segments = split_inlines_by_image(&p.inlines);
+            let mut total_h: f32 = 0.0;
+            for seg in &segments {
+                match seg {
+                    InlineSegment::Text(inlines) => {
+                        let text = inlines_to_plain(inlines);
+                        let chars_per_line = (avail_w / (body_h * 0.6)).max(1.0) as usize;
+                        let newlines = text.chars().filter(|&c| c == '\n').count();
+                        let wrapped_lines = (text.len() / chars_per_line.max(1) + newlines).max(1);
+                        total_h += wrapped_lines as f32 * body_h;
+                    }
+                    InlineSegment::Image { url, .. } => {
+                        if let Some(size) = image_cache.get_cached_dimensions(url) {
+                            let tex_w = size[0] as f32;
+                            let tex_h = size[1] as f32;
+                            let scale = if tex_w > 0.0 {
+                                (avail_w / tex_w).min(1.0)
+                            } else {
+                                1.0
+                            };
+                            total_h += (tex_h * scale).max(1.0);
+                        } else {
+                            // ponytail: 未加载→默认半屏高度，加载后 poll_pending 触发重绘修正
+                            total_h += avail_w * 0.5;
+                        }
+                    }
+                }
+            }
+            total_h.max(body_h) + spacing
+        }
+        Block::CodeBlock(cb) => {
+            let lines = cb.content.lines().count().max(1) + 2; // +2 padding
+            lines as f32 * body_h + spacing
+        }
+        Block::List(l) => {
+            let item_count = l.items.len().max(1);
+            // ponytail: 估算，不含子列表精确展开
+            item_count as f32 * body_h * 1.2 + spacing
+        }
+        Block::BlockQuote(bq) => {
+            let inner: f32 = bq
+                .blocks
+                .iter()
+                .map(|b| estimate_block_height(ui, &b.block, image_cache))
+                .sum();
+            inner + spacing * 2.0
+        }
+        Block::Table(t) => {
+            let rows = t.rows.len().max(1) + 1; // +1 header
+            rows as f32 * body_h + spacing
+        }
+        Block::ThematicBreak => body_h + spacing * 2.0,
+        Block::HtmlBlock(_) => body_h + spacing,
     }
 }
 
@@ -391,8 +483,8 @@ fn render_blockquote(
 }
 
 fn render_table(ui: &mut egui::Ui, t: &Table) {
-    // 用指针地址生成唯一 id，避免同帧多表格冲突
-    let table_id = egui::Id::new(format!("table_{:p}", t as *const Table));
+    // ponytail: Debug 内容 hash 做稳定 id，避免每帧重解析导致指针变化重建 Grid
+    let table_id = egui::Id::new(format!("table_{:?}", t));
     egui::Grid::new(table_id).striped(true).show(ui, |ui| {
         // 表头（应用对齐）
         for (col_idx, cell) in t.header.iter().enumerate() {
